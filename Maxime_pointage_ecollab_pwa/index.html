@@ -1382,6 +1382,27 @@ function loadState() {
   if(!d)try{d=JSON.parse(sessionStorage.getItem(storKey())||'null');}catch(e){}
   if(d){ S.plages=d.plages||getDefaultPlages(); S.cloture=d.cloture||false; S.date=d.date||''; S.enPoste=d.enPoste||false; S.history=d.history||[]; S.priseTsMs=d.priseTsMs||null; }
   if(S.enPoste){ _priseTsMs=S.priseTsMs||Date.now(); }
+  // Vérifier le cache eCollab : si le jour est déjà validé, bloquer immédiatement
+  _applyEcollabCacheBlock();
+}
+function _applyEcollabCacheBlock() {
+  var dateStr = S.date || todayISO();
+  var cacheKey = 'eco_recap_' + (CFG.email||'') + '_' + dateStr.slice(0,7);
+  try {
+    var cached = JSON.parse(localStorage.getItem(cacheKey));
+    if (cached && cached[dateStr]) {
+      var dayInfo = cached[dateStr];
+      if (dayInfo.valideSalarie || dayInfo.valideEntreprise) {
+        // Jour déjà validé dans eCollab — charger les plages et bloquer
+        if (dayInfo.plages && dayInfo.plages.length > 0 && (!S.history || S.history.length === 0)) {
+          S.plages = dayInfo.plages.map(function(p) { return {debut: p.debut, fin: p.fin}; });
+        }
+        S.cloture = true;
+        S.enPoste = false;
+        _priseTsMs = null;
+      }
+    }
+  } catch(e) {}
 }
 // Merge server state if it's more recent (e.g. pointage started on another device)
 function loadStateWithServerSync() {
@@ -2273,6 +2294,8 @@ function login() {
       loadStateWithServerSync();
       showPage('pointage');
       testServeur();
+      // Charger les données eCollab pour bloquer si jour déjà validé
+      _backgroundRecapRefresh();
       toast('Connecte en tant que '+email,'success');
     } else {
       errEl.textContent=data.error||'Identifiants incorrects';
@@ -2378,8 +2401,20 @@ function _backgroundRecapRefresh() {
       if (rc && rc.style.display === 'block') {
         renderRecap();
       }
-      // Mettre à jour l'état de validation du jour courant
+      // Si le jour courant est déjà validé dans eCollab, bloquer et charger les plages
+      var todayStr = S.date || todayISO();
+      var dayInfo = data.days[todayStr];
+      if (dayInfo && (dayInfo.valideSalarie || dayInfo.valideEntreprise)) {
+        // Charger les plages eCollab dans l'état local
+        if (dayInfo.plages && dayInfo.plages.length > 0) {
+          S.plages = dayInfo.plages.map(function(p) { return {debut: p.debut, fin: p.fin}; });
+        }
+        S.cloture = true;
+        save();
+      }
+      // Mettre à jour toute l'UI (Horaires + Pointage)
       updateUI();
+      renderPointage();
     }
   })
   .catch(function() { /* silencieux */ });
