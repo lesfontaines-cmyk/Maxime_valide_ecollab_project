@@ -1637,24 +1637,32 @@ function renderPlages() {
   var dateEl = document.getElementById('dateSelect');
   if (dateEl) dateEl.innerHTML = genDateOptions();
 
+  var dejaValide = _isJourValideEcollab();
+  var disabledAttr = (dejaValide || S.cloture) ? ' disabled' : '';
+  var opacityStyle = (dejaValide || S.cloture) ? ' style="opacity:0.5;pointer-events:none"' : '';
+
   document.getElementById('plagesList').innerHTML=S.plages.map(function(p,i){
     var label = S.plages.length>1 ? 'Plage '+(i+1) : 'Horaires';
-    var delBtn = i===S.plages.length-1 ? '<button class="plage-del-btn" onclick="removePlage('+i+')">Supprimer</button>' : '';
-    return '<div class="plage-card">'+
+    var delBtn = (!dejaValide && !S.cloture && i===S.plages.length-1) ? '<button class="plage-del-btn" onclick="removePlage('+i+')">Supprimer</button>' : '';
+    return '<div class="plage-card"'+opacityStyle+'>'+
       '<div class="plage-card-head">'+
         '<span class="plage-label">'+label+'</span>'+
         delBtn+
       '</div>'+
       '<div class="time-row">'+
         '<span class="time-row-label">Debut</span>'+
-        '<select class="time-select" onchange="setField('+i+',\'debut\',this.value)">'+genTimeOptions(p.debut)+'</select>'+
+        '<select class="time-select" onchange="setField('+i+',\'debut\',this.value)"'+disabledAttr+'>'+genTimeOptions(p.debut)+'</select>'+
       '</div>'+
       '<div class="time-row">'+
         '<span class="time-row-label">Fin</span>'+
-        '<select class="time-select" onchange="setField('+i+',\'fin\',this.value)">'+genTimeOptions(p.fin)+'</select>'+
+        '<select class="time-select" onchange="setField('+i+',\'fin\',this.value)"'+disabledAttr+'>'+genTimeOptions(p.fin)+'</select>'+
       '</div>'+
     '</div>';
   }).join('');
+
+  // Masquer le bouton ajouter si jour validé/clôturé
+  var addBtn = document.querySelector('.add-plage-btn');
+  if (addBtn) addBtn.style.display = (dejaValide || S.cloture) ? 'none' : '';
 }
 
 // ======================================
