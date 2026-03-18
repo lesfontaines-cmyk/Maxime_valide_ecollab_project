@@ -1,0 +1,1775 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#141008">
+<title>Validation — Charles Murgat</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+
+  :root {
+    --cream:   #f5f0e8;
+    --cream2:  #ede7da;
+    --white:   #ffffff;
+    --gold:    #7a5020;
+    --gold-lt: #9a6830;
+    --dark:    #141008;
+    --mid:     #3a3028;
+    --light:   #5a5048;
+    --border:  #c8baa8;
+    --green:   #3d6e3d;
+    --red:     #8a2f2f;
+    --blue:    #2d5a8a;
+    --serif:   'Cormorant Garamond', Georgia, serif;
+    --sans:    'Jost', sans-serif;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+  body {
+    background: var(--cream);
+    color: var(--dark);
+    font-family: var(--sans);
+    font-weight: 300;
+    min-height: 100vh;
+    max-width: 520px;
+    margin: 0 auto;
+    padding-bottom: 60px;
+  }
+
+  /* --- HEADER --- */
+  .header {
+    padding: 80px 24px 20px;
+    text-align: center;
+    position: relative;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 28px;
+  }
+  .header-logo-wrap {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 24px;
+  }
+  .header-title {
+    font-family: var(--serif);
+    font-size: 22px;
+    font-weight: 300;
+    color: var(--mid);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+  .header-sub {
+    font-size: 13px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--light);
+    margin-top: 5px;
+  }
+
+  .logout-btn {
+    position: fixed;
+    top: 16px; left: 16px;
+    z-index: 300;
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--white);
+    color: var(--light);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px;
+    transition: all .2s;
+  }
+  .logout-btn:hover { border-color: var(--red); color: var(--red); }
+
+  .back-btn {
+    position: fixed;
+    top: 16px; left: 16px;
+    z-index: 300;
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--white);
+    color: var(--light);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px;
+    transition: all .2s;
+  }
+  .back-btn:hover { border-color: var(--gold); color: var(--gold); }
+
+  /* --- LOADING BANNER --- */
+  .loading-banner {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 9999;
+    height: 0;
+    overflow: hidden;
+    background: var(--white);
+    border-bottom: 1px solid var(--border);
+    transition: height .3s ease, opacity .3s ease;
+    opacity: 0;
+  }
+  .loading-banner.visible {
+    height: 32px;
+    opacity: 1;
+  }
+  body.has-banner { padding-top: 32px; }
+  body.has-banner .logout-btn,
+  body.has-banner .back-btn,
+  body.has-banner .settings-btn { top: 48px; }
+  .loading-banner-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 32px;
+    font-size: 13px;
+    color: var(--dark);
+  }
+  .loading-banner-content svg { animation: spin 1.2s linear infinite; }
+  @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+  .loading-banner-bar {
+    position: absolute;
+    bottom: 0; left: 0;
+    height: 2px;
+    background: var(--gold);
+    animation: sync-progress 2s ease-in-out infinite;
+  }
+  @keyframes sync-progress {
+    0% { left: 0; width: 0; }
+    50% { left: 0; width: 70%; }
+    100% { left: 100%; width: 0; }
+  }
+
+  /* --- LOGIN --- */
+  .login-screen {
+    display: none;
+    min-height: 100vh;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 24px;
+    background: var(--cream);
+  }
+  .login-screen.show { display: flex; }
+  .login-logo { margin-bottom: 32px; }
+  .login-title {
+    font-family: var(--serif);
+    font-size: 22px;
+    font-weight: 300;
+    color: var(--mid);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 28px;
+  }
+  .login-form {
+    width: 100%;
+    max-width: 340px;
+  }
+  .field { margin-bottom: 16px; }
+  .field label {
+    display: block;
+    font-size: 12px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--light);
+    margin-bottom: 6px;
+  }
+  .field input {
+    width: 100%;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--white);
+    font-family: var(--sans);
+    font-size: 16px;
+    color: var(--dark);
+    outline: none;
+    transition: border-color .2s;
+  }
+  .field input:focus { border-color: var(--gold); }
+  .field input::placeholder { color: var(--border); }
+  .field .hint {
+    font-size: 12px;
+    color: var(--border);
+    margin-top: 4px;
+  }
+
+  .btn-login {
+    width: 100%;
+    padding: 16px;
+    background: var(--gold);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background .2s;
+    margin-top: 6px;
+  }
+  .btn-login:hover { background: #8a6438; }
+  .btn-login:disabled { opacity: 0.5; cursor: wait; }
+
+  .login-error {
+    display: none;
+    background: #fdf0f0;
+    border: 1px solid var(--red);
+    border-radius: 4px;
+    padding: 12px 16px;
+    color: var(--red);
+    font-size: 14px;
+    margin-bottom: 16px;
+    text-align: center;
+  }
+  .login-error.show { display: block; }
+
+  /* --- APP SCREENS --- */
+  .app-screen { display: none; }
+  .app-screen.active { display: block; }
+
+  /* --- COLLABORATEURS LIST --- */
+  .section-head {
+    padding: 0 24px 12px;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+  .section-title {
+    font-family: var(--serif);
+    font-size: 20px;
+    font-weight: 400;
+    color: var(--dark);
+    letter-spacing: .5px;
+  }
+  .section-hint {
+    font-size: 13px;
+    color: var(--light);
+    letter-spacing: 1px;
+  }
+
+  .collab-list { padding: 0 24px; }
+  .collab-card {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 18px 20px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: all .2s;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .collab-card:hover { border-color: var(--gold); transform: translateX(4px); }
+  .collab-card:active { transform: translateX(2px); }
+  .collab-name {
+    font-family: var(--serif);
+    font-size: 19px;
+    font-weight: 400;
+    color: var(--dark);
+  }
+  .collab-arrow {
+    color: var(--border);
+    font-size: 18px;
+    transition: color .2s;
+  }
+  .collab-card:hover .collab-arrow { color: var(--gold); }
+
+  .collab-card-left {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .collab-sync {
+    font-size: 12px;
+    color: var(--light);
+    letter-spacing: .3px;
+  }
+  .sync-info {
+    text-align: center;
+    font-size: 12px;
+    color: var(--light);
+    margin-bottom: 12px;
+    letter-spacing: .5px;
+  }
+  .collab-empty {
+    text-align: center;
+    padding: 40px 24px;
+    color: var(--light);
+    font-size: 15px;
+  }
+
+  .settings-btn {
+    position: fixed;
+    top: 16px; right: 16px;
+    z-index: 300;
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--white);
+    color: var(--light);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px;
+    transition: all .2s;
+  }
+  .settings-btn:hover { border-color: var(--gold); color: var(--gold); }
+
+  .sync-btn {
+    position: fixed;
+    top: 16px; right: 64px;
+    z-index: 300;
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--white);
+    color: var(--light);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px;
+    transition: all .2s;
+  }
+  .sync-btn:hover { border-color: var(--gold); color: var(--gold); }
+  .sync-btn.syncing { animation: spin 1.2s linear infinite; border-color: var(--gold); color: var(--gold); }
+  body.has-banner .sync-btn { top: 48px; }
+
+  /* --- SETTINGS SCREEN --- */
+  .settings-list { padding: 0 24px; }
+  .settings-item {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 14px 20px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .settings-item:hover { border-color: var(--gold); }
+  .settings-item-name {
+    font-family: var(--serif);
+    font-size: 17px;
+    font-weight: 400;
+    color: var(--dark);
+  }
+  .settings-toggle {
+    width: 42px; height: 24px;
+    border-radius: 12px;
+    background: var(--border);
+    position: relative;
+    transition: background .2s;
+    flex-shrink: 0;
+  }
+  .settings-toggle.on { background: var(--green); }
+  .settings-toggle::after {
+    content: '';
+    position: absolute;
+    top: 3px; left: 3px;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: var(--white);
+    transition: transform .2s;
+  }
+  .settings-toggle.on::after { transform: translateX(18px); }
+  .settings-info {
+    text-align: center;
+    padding: 20px 24px 0;
+    color: var(--light);
+    font-size: 13px;
+  }
+
+  /* --- MONTH NAV --- */
+  .month-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    padding: 0 24px 20px;
+  }
+  .month-nav-btn {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--white);
+    color: var(--light);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    transition: all .2s;
+  }
+  .month-nav-btn:hover { border-color: var(--gold); color: var(--gold); }
+  .month-label {
+    font-family: var(--serif);
+    font-size: 20px;
+    color: var(--dark);
+    min-width: 180px;
+    text-align: center;
+    letter-spacing: 1px;
+  }
+
+  /* --- VALIDATION VIEW --- */
+  .valid-collab-name {
+    text-align: center;
+    font-family: var(--serif);
+    font-size: 18px;
+    color: var(--gold);
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+    padding: 0 24px;
+  }
+  .valid-last-sync {
+    text-align: center;
+    font-size: 11px;
+    color: var(--light);
+    margin-bottom: 14px;
+    letter-spacing: .3px;
+  }
+
+  .select-all-wrap {
+    padding: 0 24px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .select-all-cb {
+    width: 22px; height: 22px;
+    accent-color: var(--gold);
+    cursor: pointer;
+  }
+  .select-all-label {
+    font-size: 14px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--light);
+    cursor: pointer;
+  }
+
+  .days-list { padding: 0 24px; }
+
+  .day-row {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 14px 16px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    transition: border-color .2s;
+  }
+  .day-row:hover { border-color: var(--gold-lt); }
+  .day-row.exact-hours { background: #e8f5e9; border-color: #a5d6a7; }
+  .day-row.over-hours { background: #e3f0fc; border-color: #a8c8e8; }
+  .day-row.under-hours { background: #fce4e4; border-color: #e8a8a8; }
+  .day-row.conge { background: #fff9e6; border-color: #e6d590; }
+  .day-row.no-work { opacity: .5; }
+  .day-row.weekend { background: var(--cream2); opacity: .6; }
+
+  .day-cb-wrap {
+    flex-shrink: 0;
+    width: 26px; height: 26px;
+    border: 2px solid var(--border);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    transition: all .2s;
+    background: var(--white);
+  }
+  .day-cb-wrap:hover { border-color: var(--gold); }
+  .day-cb-wrap.checked { background: var(--green); border-color: var(--green); }
+  .day-cb-wrap.checked svg { display: block; }
+  .day-cb-wrap svg { display: none; }
+  .day-cb-wrap.disabled { cursor: not-allowed; opacity: .35; }
+  .day-cb-wrap.disabled:hover { border-color: var(--border); }
+
+  .day-info { flex: 1; min-width: 0; }
+  .day-date {
+    font-family: var(--serif);
+    font-size: 16px;
+    color: var(--dark);
+  }
+  .day-plages {
+    font-size: 13px;
+    color: var(--light);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .day-hours {
+    font-family: var(--serif);
+    font-size: 16px;
+    color: var(--mid);
+    flex-shrink: 0;
+    min-width: 42px;
+    text-align: right;
+  }
+  .day-hours.over-hours { color: #1565c0; font-weight: 400; }
+  .day-hours.under-hours { color: #c62828; font-weight: 400; }
+  .day-bars {
+    margin: 4px 0 2px;
+  }
+  .day-bars-bg {
+    position: relative;
+    height: 20px;
+    background: var(--cream2);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .day-bar {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    background: #8a9bb0;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .day-bar-label {
+    font-size: 9px;
+    font-weight: 500;
+    color: #fff;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 0 3px;
+    line-height: 20px;
+  }
+  .day-bar.conge-bar {
+    background: #d4a843;
+    cursor: help;
+  }
+  .day-bar[title] {
+    cursor: help;
+  }
+
+  .day-badges {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex-shrink: 0;
+    align-items: flex-end;
+  }
+  .day-badge {
+    font-size: 10px;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 3px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .badge-salarie { background: #e8f0ff; color: #2d5a8a; }
+  .badge-entreprise { background: #e5f2e5; color: #2d6e2d; }
+  .badge-attente { background: #fff5e0; color: #8a6520; }
+
+  /* --- WEEK SEPARATOR --- */
+  .week-separator {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 0 8px;
+    color: var(--light);
+    font-size: 12px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  .week-separator::before,
+  .week-separator::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* --- TOTAL BAR --- */
+  .total-bar {
+    margin: 20px 24px 0;
+    padding: 16px 20px;
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .total-label {
+    font-size: 12px;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: var(--light);
+  }
+  .total-value {
+    font-family: var(--serif);
+    font-size: 22px;
+    color: var(--dark);
+  }
+
+  /* --- VALIDATE BUTTON --- */
+  .validate-wrap { padding: 20px 24px; }
+  .validate-btn {
+    width: 100%;
+    padding: 16px;
+    background: var(--green);
+    color: var(--white);
+    border: none;
+    border-radius: 4px;
+    font-family: var(--sans);
+    font-size: 14px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .validate-btn:hover { background: #4a7f4a; }
+  .validate-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+  .validate-result {
+    margin: 0 24px;
+    padding: 14px 16px;
+    border-radius: 4px;
+    font-size: 14px;
+    text-align: center;
+    display: none;
+  }
+  .validate-result.success { display: block; background: #e8f5e8; border: 1px solid #a0c8a0; color: var(--green); }
+  .validate-result.error { display: block; background: #f5e6e6; border: 1px solid #d4a0a0; color: var(--red); }
+
+  /* --- OVERLAY VALIDATION --- */
+  .overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    background: rgba(20,16,8,.7);
+    align-items: center;
+    justify-content: center;
+  }
+  .overlay.visible { display: flex; }
+  .overlay-box {
+    background: var(--cream);
+    border-radius: 8px;
+    padding: 32px 28px;
+    max-width: 360px;
+    width: 90%;
+    text-align: center;
+  }
+  .overlay-title {
+    font-family: var(--serif);
+    font-size: 22px;
+    margin-bottom: 16px;
+    color: var(--dark);
+  }
+  .overlay-msg {
+    font-size: 14px;
+    color: var(--light);
+    margin-bottom: 24px;
+    line-height: 1.6;
+  }
+  .overlay-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 20px;
+    text-align: left;
+    padding: 0 12px;
+  }
+  .overlay-step {
+    font-size: 13px;
+    color: var(--light);
+    opacity: .4;
+    transition: all .3s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .overlay-step .step-icon { font-size: 16px; min-width: 20px; text-align: center; }
+  .overlay-step.active { opacity: 1; color: var(--dark); font-weight: 400; }
+  .overlay-step.done { opacity: 1; color: var(--green); }
+  .overlay-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+  }
+  .overlay-btn {
+    padding: 12px 24px;
+    border-radius: 4px;
+    border: none;
+    font-family: var(--sans);
+    font-size: 13px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .overlay-btn-cancel {
+    background: var(--white);
+    border: 1px solid var(--border);
+    color: var(--light);
+  }
+  .overlay-btn-cancel:hover { border-color: var(--red); color: var(--red); }
+  .overlay-btn-ok {
+    background: var(--dark);
+    color: var(--cream);
+  }
+  .overlay-btn-ok:hover { background: var(--mid); }
+
+  /* --- RESPONSIVE --- */
+  @media (max-width: 400px) {
+    .header { padding: 60px 16px 16px; }
+    .collab-list, .days-list, .validate-wrap, .select-all-wrap,
+    .section-head, .month-nav, .total-bar, .validate-result,
+    .valid-collab-name { padding-left: 16px; padding-right: 16px; }
+    .total-bar { margin-left: 16px; margin-right: 16px; }
+    .validate-result { margin-left: 16px; margin-right: 16px; }
+  }
+
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ LOADING BANNER ═══════════════ -->
+<div class="loading-banner" id="loadingBanner">
+  <div class="loading-banner-content">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+    <span id="loadingText">Chargement...</span>
+  </div>
+  <div class="loading-banner-bar"></div>
+</div>
+
+<!-- ═══════════════ LOGIN SCREEN ═══════════════ -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-logo">
+    <svg style="width:260px;height:auto;display:block;margin:0 auto" xmlns="http://www.w3.org/2000/svg" viewBox="15 21 243 38"><defs><style>.cls-1{fill:none;}.cls-1,.cls-2{stroke-width:0px;}.cls-3{clip-path:url(#clippath-4);}.cls-4{clip-path:url(#clippath-3);}.cls-5{clip-path:url(#clippath-7);}.cls-6{clip-path:url(#clippath-8);}.cls-7{clip-path:url(#clippath-6);}.cls-8{clip-path:url(#clippath-5);}.cls-9{isolation:isolate;opacity:.9;}</style><clipPath id="clippath-3"><rect class="cls-1" x="-497.79" y="-256.84" width="841.89" height="595.28"/></clipPath><clipPath id="clippath-4"><rect class="cls-1" x="17.21" y="22.44" width="26" height="28"/></clipPath><clipPath id="clippath-5"><rect class="cls-1" x="18.04" y="23.2" width="24.93" height="27.16"/></clipPath><clipPath id="clippath-6"><rect class="cls-1" x="-497.79" y="-262.85" width="841.89" height="595.28"/></clipPath><clipPath id="clippath-7"><rect class="cls-1" x="55.21" y="22.43" width="201" height="16"/></clipPath><clipPath id="clippath-8"><rect class="cls-1" x="55.92" y="22.98" width="199.93" height="14.86"/></clipPath></defs><g class="cls-4"><g class="cls-9"><g class="cls-3"><g class="cls-8"><path class="cls-2" d="m41.23,26.5c0,.37-.3.68-.68.68s-.68-.3-.68-.68.3-.68.68-.68.68.3.68.68"/><path class="cls-2" d="m21.21,43.25c0,.37-.3.68-.68.68s-.68-.3-.68-.68.3-.68.68-.68.68.3.68.68"/><path class="cls-2" d="m42.95,37.15c0-.12-.03-.15-.15-.09-.36.18-.72.36-1.08.56-.62.35-1.24.68-1.87,1.01-.43.22-.89.4-1.36.55-.52.17-1.06.27-1.61.33-.67.07-1.33.06-1.99-.02-.63-.08-1.25-.24-1.85-.48-.42-.17-.82-.35-1.21-.56-.65-.36-1.29-.73-1.93-1.1-.44-.25-.9-.47-1.38-.66-1.07-.43-2.2-.64-3.36-.66-.61-.01-1.2.03-1.8.11-1.01.14-1.95.47-2.85.9-.82.39-1.59.89-2.38,1.34-.08.05-.1.09-.1.17,0,.64,0,1.29,0,1.93,0,.04-.02.09.04.13.07-.07.17-.11.27-.16.16-.08.34-.14.5-.24.28-.18.58-.34.87-.51.25-.15.51-.28.76-.43.58-.36,1.21-.64,1.86-.87.3-.11.62-.18.94-.24.36-.07.73-.13,1.1-.15.65-.03,1.29-.01,1.93.1.62.11,1.21.29,1.79.52.31.13.61.29.91.44.34.17.68.35,1,.55.51.33,1.05.6,1.58.88.74.38,1.52.65,2.34.83.42.08.84.16,1.26.17.59.01,1.18.03,1.76-.02.5-.04.98-.12,1.46-.24.97-.23,1.88-.63,2.75-1.1.56-.31,1.12-.62,1.68-.92.09-.05.12-.1.12-.19,0-.62,0-1.25,0-1.87"/><path class="cls-2" d="m42.95,43.09c0-.65,0-1.3,0-1.94,0-.08-.02-.1-.1-.06-.49.23-.97.46-1.44.73-.57.33-1.14.65-1.72.94-.47.23-.98.39-1.49.54-.63.18-1.28.27-1.93.28-.92.02-1.82-.07-2.71-.35-.58-.19-1.12-.42-1.66-.71-.5-.26-.98-.57-1.48-.85-.3-.17-.59-.37-.91-.5-.36-.15-.71-.34-1.08-.48-.6-.23-1.22-.4-1.86-.51-.43-.07-.86-.11-1.29-.12-.84-.02-1.67.03-2.49.21-.38.08-.76.18-1.13.31-.29.1-.56.24-.85.35-.27.1-.52.24-.77.37-.53.27-1.01.62-1.55.88-.14.07-.26.16-.4.24-.07.04-.06.09-.06.15v1.94c0,.08,0,.12.11.07.46-.24.92-.47,1.36-.74.09-.05.11-.08.05-.18-.19-.33-.18-.67.03-.99.42-.66,1.46-.71,1.99-.1.28.32.46.68.57,1.07.13.45.18.91.22,1.37l-.09,1.28c-.08.41-.09.53-.21.93-.02.08,0,.09.07.12.54.21,1.1.35,1.68.44.23.03.22.04.28-.17.18-.69.24-1.1.29-1.81.08-1.25-.03-2.47-.62-3.61-.04-.07-.04-.11.06-.11.11,0,.22-.02.34-.03,1.3-.11,2.55.04,3.76.52.81.32,1.56.77,2.3,1.21.71.41,1.42.8,2.18,1.1.84-.31,1.69-.51,2.55-.58.35-.03.71-.05,1.06-.05.23,0,.46,0,.69.02.91.05,1.8.21,2.63.48.11.03.22.07.32.11.12-.05.24-.09.36-.14.29-.12.57-.25.85-.39.18-.09.36-.19.54-.3.48-.28.97-.54,1.46-.81.05-.03.08-.08.08-.13"/><path class="cls-2" d="m42.95,48.34c0-.35,0-.64,0-.92,0-.11,0-.19-.13-.25-.07-.04-.14-.06-.21-.1-.25-.15-.51-.29-.77-.43-.44-.24-.88-.5-1.33-.71-.36-.17-.73-.33-1.1-.47-.04-.01-.07-.03-.11-.04-.07-.02-.13-.05-.2-.07-.18-.06-.36-.11-.54-.15-.01,0-.02,0-.03,0-.61-.15-1.23-.24-1.85-.28-.22-.01-.44-.02-.65-.02-.33,0-.67.01-1,.04-1.2.11-2.32.45-3.39.98-.84.41-1.64.91-2.46,1.35-.04.02-.09.05-.13.07-1.09.59-2.24.97-3.5,1.05-1.55.1-3.01-.18-4.39-.88-.47-.24-.93-.5-1.39-.77-.27-.16-.53-.33-.81-.47-.24-.12-.48-.25-.72-.39-.05-.03-.07-.08-.14-.05-.07.03-.04.08-.04.13,0,.63,0,1.25,0,1.88,0,.1.04.16.12.19.22.09.4.23.61.34.3.16.58.35.88.51.47.27.95.49,1.44.72.48.22.99.39,1.51.51.51.12,1.03.21,1.55.22.55,0,1.11.06,1.67,0,.44-.04.86-.11,1.29-.2.8-.17,1.55-.45,2.28-.82.43-.22.87-.43,1.28-.68.29-.18.59-.35.88-.53.33-.19.67-.37,1.02-.53.51-.24,1.04-.41,1.59-.54.45-.1.9-.15,1.35-.19.47-.04.95-.03,1.42.04.36.05.73.1,1.09.18.67.15,1.31.41,1.92.71.48.23.94.51,1.4.77.31.17.61.35.93.51.2.1.4.21.61.28.06.02.12.02.11-.05-.05-.34,0-.67-.02-.95"/><path class="cls-2" d="m18.04,32.53c.22-.11.44-.2.64-.32.67-.4,1.35-.77,2.02-1.15.34-.2.7-.37,1.06-.52.53-.22,1.07-.39,1.65-.48.47-.07.95-.12,1.43-.14.31-.01.62.03.93.05.27.02.54.05.81.1.67.13,1.31.37,1.94.66.1.05.21.08.3.14.27.18.57.33.85.5.35.2.7.41,1.05.6.34.18.67.38,1.02.54.37.16.74.31,1.12.44.35.12.71.23,1.07.31.46.09.93.16,1.4.16.6,0,1.2.03,1.79-.03.52-.05,1.03-.15,1.53-.28,1.03-.27,1.97-.74,2.89-1.24.42-.23.84-.47,1.26-.7.1-.05.14-.11.14-.21,0-.58,0-1.15,0-1.72q0-.26-.24-.16s-.08.02-.11.04c-.65.35-1.29.7-1.93,1.06-.52.29-1.05.56-1.61.77-.13.05-.26.1-.38.14-.13.04-.27.09-.4.12-.53.15-1.08.23-1.63.27-1.04.07-2.06-.02-3.06-.33-.8-.25-1.54-.62-2.25-1.04-.72-.42-1.43-.85-2.18-1.21-1.45-.69-2.98-.99-4.59-.92-1.08.04-2.13.23-3.14.62-.71.28-1.38.62-2.04,1-.41.24-.82.49-1.22.73-.06.04-.1.07-.1.15,0,.68,0,1.36,0,2.05"/><path class="cls-2" d="m42.95,33.11c0-.13-.04-.14-.15-.09-.42.2-.84.41-1.25.64-.46.26-.92.52-1.4.76-.41.21-.81.4-1.24.57-.69.27-1.4.43-2.14.49-1.09.09-2.16,0-3.21-.32-.34-.1-.65-.24-.97-.38-.27-.12-.54-.26-.8-.4-.37-.2-.73-.41-1.08-.64-.19-.12-.41-.21-.62-.33-.34-.2-.69-.38-1.05-.54-.3-.14-.6-.27-.92-.36-.33-.1-.65-.21-.99-.28-.65-.15-1.3-.21-1.97-.24-.42-.01-.85.01-1.27.05-.69.07-1.37.19-2.02.41-.43.14-.85.3-1.26.5-.26.13-.53.24-.78.38-.2.11-.41.24-.61.36-.33.19-.64.43-1,.58-.12.05-.19.13-.18.28.02.29,0,.59,0,.88,0,.32,0,.65,0,.97,0,.11.03.13.13.08.22-.11.44-.21.65-.33.42-.24.82-.5,1.24-.73.33-.18.66-.36.98-.53.3-.16.61-.3.93-.42.85-.35,1.75-.49,2.67-.52.39-.01.78.02,1.17.05.53.05,1.05.15,1.55.32.73.24,1.42.56,2.07.95.41.25.84.49,1.26.73.2.11.42.2.61.32.28.18.59.31.89.44.35.15.71.27,1.08.37.4.11.81.2,1.22.26.39.05.78.07,1.17.07.65,0,1.3,0,1.93-.1.57-.1,1.13-.22,1.67-.43.31-.12.63-.21.93-.36.37-.19.75-.36,1.11-.58.49-.29,1-.55,1.5-.82.08-.04.11-.09.11-.17,0-.63,0-1.26,0-1.89"/><path class="cls-2" d="m42.95,27.54c0-.61,0-1.22,0-1.83,0-.17-.1-.22-.22-.28-.04-.02-.09-.03-.14-.06-.39-.22-.78-.44-1.18-.66-.39-.21-.77-.45-1.18-.62-.32-.13-.65-.27-.98-.38-.88-.29-1.79-.46-2.72-.51-.65-.03-1.31,0-1.96.08-.97.12-1.88.39-2.75.8-.74.34-1.43.76-2.12,1.16-.25.14-.5.28-.75.42-.63.35-1.3.63-2,.81-.72.19-1.45.25-2.19.23-.35,0-.71-.02-1.05-.07-.75-.12-1.47-.33-2.17-.65-.48-.22-.94-.47-1.4-.73-.65-.37-1.28-.77-1.96-1.09-.1-.05-.14-.06-.14.07,0,.64,0,1.29,0,1.93,0,.09.04.14.11.17.64.31,1.21.73,1.85,1.04.4.2.79.42,1.2.6.88-.33,1.75-.54,2.65-.62.35-.03.71-.05,1.06-.05.23,0,.46,0,.69.02.91.05,1.8.21,2.63.48.14.04.28.09.42.15.12-.05.23-.1.35-.15.87-.39,1.67-.9,2.49-1.37.75-.43,1.53-.8,2.37-1.03.63-.17,1.26-.25,1.91-.27.5-.02.99.02,1.48.09.06,0,.2-.02.11.13-.45.82-.63,1.71-.67,2.62-.05,1.03,0,1.72.26,2.72.03.12.09.14.19.12.58-.1,1.14-.21,1.68-.43.1-.04.13-.08.1-.18-.15-.53-.14-.75-.19-1.29,0-.32,0-.65,0-.97.02-.17.04-.33.06-.5.04-.26.11-.5.2-.74.09-.27.21-.52.38-.74.14-.18.31-.35.54-.45.46-.21,1.02-.14,1.38.16.31.26.51.76.25,1.22-.02.03-.03.06.01.08.08.05.16.12.25.16.32.17.67.3.98.49.04.03.09.06.14.04.06-.03.03-.09.03-.13"/></g></g></g></g><g class="cls-7"><g class="cls-9"><g class="cls-5"><g class="cls-6"><path class="cls-2" d="m66.38,24.69v2.37c-1.16-.97-2.35-1.45-3.59-1.45-1.36,0-2.51.49-3.44,1.47-.94.97-1.41,2.16-1.41,3.57s.47,2.56,1.41,3.52c.94.96,2.09,1.43,3.45,1.43.7,0,1.3-.11,1.79-.34.27-.11.56-.27.85-.46.29-.19.61-.43.93-.7v2.41c-1.15.65-2.35.97-3.61.97-1.89,0-3.51-.66-4.85-1.98-1.33-1.33-2-2.94-2-4.83,0-1.69.56-3.19,1.67-4.52,1.37-1.62,3.15-2.43,5.33-2.43,1.19,0,2.34.32,3.45.97"/><polygon class="cls-2" points="74.79 29.16 80.51 29.16 80.51 23.98 82.51 23.98 82.51 37.23 80.51 37.23 80.51 31.04 74.79 31.04 74.79 37.23 72.79 37.23 72.79 23.98 74.79 23.98 74.79 29.16"/><path class="cls-2" d="m96.99,34.01h-5.67l-1.48,3.22h-2.15l6.56-14.09,6.33,14.09h-2.19l-1.39-3.22Zm-.82-1.88l-1.97-4.51-2.06,4.51h4.03Z"/><path class="cls-2" d="m110.24,31.58l4.1,5.65h-2.45l-3.79-5.43h-.36v5.43h-2v-13.26h2.35c1.75,0,3.02.33,3.79.99.86.73,1.29,1.7,1.29,2.9,0,.94-.27,1.75-.81,2.42-.54.67-1.25,1.11-2.13,1.3m-2.49-1.52h.64c1.89,0,2.84-.72,2.84-2.17,0-1.36-.92-2.04-2.77-2.04h-.71v4.21Z"/><polygon class="cls-2" points="121.85 23.98 121.85 35.35 125.75 35.35 125.75 37.23 119.85 37.23 119.85 23.98 121.85 23.98"/><polygon class="cls-2" points="138.48 25.86 133.16 25.86 133.16 29.04 138.32 29.04 138.32 30.92 133.16 30.92 133.16 35.35 138.48 35.35 138.48 37.23 131.16 37.23 131.16 23.98 138.48 23.98 138.48 25.86"/><path class="cls-2" d="m152.12,25.95l-1.62.96c-.3-.53-.59-.87-.87-1.03-.29-.18-.66-.28-1.11-.28-.55,0-1.02.16-1.38.47-.37.31-.55.7-.55,1.17,0,.65.48,1.17,1.44,1.56l1.32.54c1.08.43,1.86.97,2.36,1.59.5.63.75,1.4.75,2.3,0,1.22-.41,2.23-1.22,3.02-.82.8-1.83,1.2-3.05,1.2-1.15,0-2.1-.34-2.85-1.02-.74-.68-1.2-1.64-1.38-2.88l2.03-.45c.09.78.25,1.32.48,1.61.41.57,1.01.86,1.8.86.62,0,1.14-.21,1.55-.63.41-.42.62-.95.62-1.59,0-.26-.04-.49-.11-.71-.07-.21-.18-.41-.33-.59-.15-.18-.35-.35-.59-.51-.24-.16-.53-.31-.86-.45l-1.28-.53c-1.82-.77-2.72-1.89-2.72-3.37,0-1,.38-1.83,1.14-2.5.76-.68,1.71-1.01,2.84-1.01,1.53,0,2.72.74,3.58,2.23"/><polygon class="cls-2" points="164.43 37.23 167.22 22.98 171.77 33.28 176.49 22.98 178.99 37.23 176.94 37.23 175.66 29.23 171.74 37.84 167.93 29.22 166.5 37.23 164.43 37.23"/><path class="cls-2" d="m187.32,23.98v7.98c0,1.14.19,1.97.56,2.5.55.76,1.34,1.14,2.34,1.14s1.8-.38,2.35-1.14c.37-.51.56-1.34.56-2.5v-7.98h2v8.53c0,1.4-.43,2.55-1.3,3.45-.98,1.01-2.18,1.51-3.61,1.51s-2.62-.5-3.6-1.51c-.87-.9-1.31-2.05-1.31-3.45v-8.53h2Z"/><path class="cls-2" d="m206.32,31.58l4.1,5.65h-2.45l-3.79-5.43h-.36v5.43h-2v-13.26h2.35c1.75,0,3.01.33,3.79.99.86.73,1.29,1.7,1.29,2.9,0,.94-.27,1.75-.81,2.42-.54.67-1.25,1.11-2.13,1.3m-2.49-1.52h.64c1.89,0,2.84-.72,2.84-2.17,0-1.36-.92-2.04-2.77-2.04h-.71v4.21Z"/><path class="cls-2" d="m222.45,30.33h5.48v.44c0,1-.12,1.88-.35,2.65-.23.71-.61,1.37-1.16,1.99-1.23,1.38-2.8,2.08-4.7,2.08s-3.45-.67-4.77-2.01c-1.32-1.35-1.98-2.96-1.98-4.84s.67-3.55,2.02-4.89c1.34-1.35,2.98-2.02,4.91-2.02,1.04,0,2,.21,2.9.63.86.42,1.7,1.11,2.53,2.06l-1.43,1.37c-1.09-1.45-2.41-2.17-3.97-2.17-1.4,0-2.58.48-3.53,1.45-.95.95-1.43,2.14-1.43,3.57s.53,2.69,1.59,3.65c.99.89,2.06,1.33,3.22,1.33.98,0,1.87-.33,2.65-1,.78-.67,1.22-1.47,1.31-2.4h-3.31v-1.88Z"/><path class="cls-2" d="m241.14,34.01h-5.67l-1.48,3.22h-2.15l6.56-14.09,6.33,14.09h-2.19l-1.39-3.22Zm-.82-1.88l-1.97-4.51-2.06,4.51h4.03Z"/><polygon class="cls-2" points="252.82 25.86 252.82 37.23 250.82 37.23 250.82 25.86 247.77 25.86 247.77 23.98 255.86 23.98 255.86 25.86 252.82 25.86"/></g></g></g></g><text x="57" y="48" font-family="Georgia, 'Times New Roman', serif" font-size="8.5" font-style="italic" fill="#1a1a1a" textLength="199" lengthAdjust="spacing">Pisciculture familiale depuis 1898</text></svg>
+  </div>
+  <div class="login-title">Connexion Responsables</div>
+  <div class="login-form" onkeydown="if(event.key==='Enter')doLogin()">
+    <div class="login-error" id="loginError"></div>
+    <div class="field">
+      <label>Adresse e-mail Ecollaboratrice</label>
+      <input type="email" id="loginEmail" placeholder="votre@email.com" autocomplete="email" />
+    </div>
+    <div class="field">
+      <label>Mot de passe</label>
+      <input type="password" id="loginPassword" placeholder="&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;" autocomplete="current-password" />
+    </div>
+    <div class="field">
+      <label>URL Ecollaboratrice</label>
+      <input type="url" id="loginUrl" placeholder="https://drive.ecollaboratrice.com/..." value="https://drive.ecollaboratrice.com/Paie/VariablePaie?idContrat=51963&mois=03&annee=2026" />
+      <div class="hint">Adresse de votre page eCollaboratrice.</div>
+    </div>
+    <div class="field">
+      <label>URL du serveur</label>
+      <input type="url" id="loginServer" placeholder="http://192.168.1.112:5000" value="http://localhost:5000" />
+      <div class="hint">Adresse du serveur de validation.</div>
+    </div>
+    <button class="btn-login" id="loginBtn" onclick="doLogin()">Se connecter</button>
+  </div>
+</div>
+
+<!-- ═══════════════ TEAM LIST SCREEN ═══════════════ -->
+<div id="teamScreen" class="app-screen">
+  <button class="logout-btn" onclick="doLogout()" title="Deconnexion">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+  </button>
+  <button class="sync-btn" id="syncBtn" onclick="syncAllCollabs()" title="Synchroniser">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+  </button>
+  <button class="settings-btn" onclick="openSettings()" title="Parametres">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+  </button>
+
+  <div class="header">
+    <div class="header-logo-wrap">
+      <svg style="width:260px;height:auto;display:block;margin:0 auto" xmlns="http://www.w3.org/2000/svg" viewBox="15 21 243 38"><defs><style>.ct1{fill:none;}.ct1,.ct2{stroke-width:0px;}.ct3{clip-path:url(#ct-4);}.ct4{clip-path:url(#ct-3);}.ct5{clip-path:url(#ct-7);}.ct6{clip-path:url(#ct-8);}.ct7{clip-path:url(#ct-6);}.ct8{clip-path:url(#ct-5);}.ct9{isolation:isolate;opacity:.9;}</style><clipPath id="ct-3"><rect class="ct1" x="-497.79" y="-256.84" width="841.89" height="595.28"/></clipPath><clipPath id="ct-4"><rect class="ct1" x="17.21" y="22.44" width="26" height="28"/></clipPath><clipPath id="ct-5"><rect class="ct1" x="18.04" y="23.2" width="24.93" height="27.16"/></clipPath><clipPath id="ct-6"><rect class="ct1" x="-497.79" y="-262.85" width="841.89" height="595.28"/></clipPath><clipPath id="ct-7"><rect class="ct1" x="55.21" y="22.43" width="201" height="16"/></clipPath><clipPath id="ct-8"><rect class="ct1" x="55.92" y="22.98" width="199.93" height="14.86"/></clipPath></defs><g class="ct4"><g class="ct9"><g class="ct3"><g class="ct8"><path class="ct2" d="m41.23,26.5c0,.37-.3.68-.68.68s-.68-.3-.68-.68.3-.68.68-.68.68.3.68.68"/><path class="ct2" d="m21.21,43.25c0,.37-.3.68-.68.68s-.68-.3-.68-.68.3-.68.68-.68.68.3.68.68"/><path class="ct2" d="m42.95,37.15c0-.12-.03-.15-.15-.09-.36.18-.72.36-1.08.56-.62.35-1.24.68-1.87,1.01-.43.22-.89.4-1.36.55-.52.17-1.06.27-1.61.33-.67.07-1.33.06-1.99-.02-.63-.08-1.25-.24-1.85-.48-.42-.17-.82-.35-1.21-.56-.65-.36-1.29-.73-1.93-1.1-.44-.25-.9-.47-1.38-.66-1.07-.43-2.2-.64-3.36-.66-.61-.01-1.2.03-1.8.11-1.01.14-1.95.47-2.85.9-.82.39-1.59.89-2.38,1.34-.08.05-.1.09-.1.17,0,.64,0,1.29,0,1.93,0,.04-.02.09.04.13.07-.07.17-.11.27-.16.16-.08.34-.14.5-.24.28-.18.58-.34.87-.51.25-.15.51-.28.76-.43.58-.36,1.21-.64,1.86-.87.3-.11.62-.18.94-.24.36-.07.73-.13,1.1-.15.65-.03,1.29-.01,1.93.1.62.11,1.21.29,1.79.52.31.13.61.29.91.44.34.17.68.35,1,.55.51.33,1.05.6,1.58.88.74.38,1.52.65,2.34.83.42.08.84.16,1.26.17.59.01,1.18.03,1.76-.02.5-.04.98-.12,1.46-.24.97-.23,1.88-.63,2.75-1.1.56-.31,1.12-.62,1.68-.92.09-.05.12-.1.12-.19,0-.62,0-1.25,0-1.87"/><path class="ct2" d="m42.95,43.09c0-.65,0-1.3,0-1.94,0-.08-.02-.1-.1-.06-.49.23-.97.46-1.44.73-.57.33-1.14.65-1.72.94-.47.23-.98.39-1.49.54-.63.18-1.28.27-1.93.28-.92.02-1.82-.07-2.71-.35-.58-.19-1.12-.42-1.66-.71-.5-.26-.98-.57-1.48-.85-.3-.17-.59-.37-.91-.5-.36-.15-.71-.34-1.08-.48-.6-.23-1.22-.4-1.86-.51-.43-.07-.86-.11-1.29-.12-.84-.02-1.67.03-2.49.21-.38.08-.76.18-1.13.31-.29.1-.56.24-.85.35-.27.1-.52.24-.77.37-.53.27-1.01.62-1.55.88-.14.07-.26.16-.4.24-.07.04-.06.09-.06.15v1.94c0,.08,0,.12.11.07.46-.24.92-.47,1.36-.74.09-.05.11-.08.05-.18-.19-.33-.18-.67.03-.99.42-.66,1.46-.71,1.99-.1.28.32.46.68.57,1.07.13.45.18.91.22,1.37l-.09,1.28c-.08.41-.09.53-.21.93-.02.08,0,.09.07.12.54.21,1.1.35,1.68.44.23.03.22.04.28-.17.18-.69.24-1.1.29-1.81.08-1.25-.03-2.47-.62-3.61-.04-.07-.04-.11.06-.11.11,0,.22-.02.34-.03,1.3-.11,2.55.04,3.76.52.81.32,1.56.77,2.3,1.21.71.41,1.42.8,2.18,1.1.84-.31,1.69-.51,2.55-.58.35-.03.71-.05,1.06-.05.23,0,.46,0,.69.02.91.05,1.8.21,2.63.48.11.03.22.07.32.11.12-.05.24-.09.36-.14.29-.12.57-.25.85-.39.18-.09.36-.19.54-.3.48-.28.97-.54,1.46-.81.05-.03.08-.08.08-.13"/><path class="ct2" d="m42.95,48.34c0-.35,0-.64,0-.92,0-.11,0-.19-.13-.25-.07-.04-.14-.06-.21-.1-.25-.15-.51-.29-.77-.43-.44-.24-.88-.5-1.33-.71-.36-.17-.73-.33-1.1-.47-.04-.01-.07-.03-.11-.04-.07-.02-.13-.05-.2-.07-.18-.06-.36-.11-.54-.15-.01,0-.02,0-.03,0-.61-.15-1.23-.24-1.85-.28-.22-.01-.44-.02-.65-.02-.33,0-.67.01-1,.04-1.2.11-2.32.45-3.39.98-.84.41-1.64.91-2.46,1.35-.04.02-.09.05-.13.07-1.09.59-2.24.97-3.5,1.05-1.55.1-3.01-.18-4.39-.88-.47-.24-.93-.5-1.39-.77-.27-.16-.53-.33-.81-.47-.24-.12-.48-.25-.72-.39-.05-.03-.07-.08-.14-.05-.07.03-.04.08-.04.13,0,.63,0,1.25,0,1.88,0,.1.04.16.12.19.22.09.4.23.61.34.3.16.58.35.88.51.47.27.95.49,1.44.72.48.22.99.39,1.51.51.51.12,1.03.21,1.55.22.55,0,1.11.06,1.67,0,.44-.04.86-.11,1.29-.2.8-.17,1.55-.45,2.28-.82.43-.22.87-.43,1.28-.68.29-.18.59-.35.88-.53.33-.19.67-.37,1.02-.53.51-.24,1.04-.41,1.59-.54.45-.1.9-.15,1.35-.19.47-.04.95-.03,1.42.04.36.05.73.1,1.09.18.67.15,1.31.41,1.92.71.48.23.94.51,1.4.77.31.17.61.35.93.51.2.1.4.21.61.28.06.02.12.02.11-.05-.05-.34,0-.67-.02-.95"/><path class="ct2" d="m18.04,32.53c.22-.11.44-.2.64-.32.67-.4,1.35-.77,2.02-1.15.34-.2.7-.37,1.06-.52.53-.22,1.07-.39,1.65-.48.47-.07.95-.12,1.43-.14.31-.01.62.03.93.05.27.02.54.05.81.1.67.13,1.31.37,1.94.66.1.05.21.08.3.14.27.18.57.33.85.5.35.2.7.41,1.05.6.34.18.67.38,1.02.54.37.16.74.31,1.12.44.35.12.71.23,1.07.31.46.09.93.16,1.4.16.6,0,1.2.03,1.79-.03.52-.05,1.03-.15,1.53-.28,1.03-.27,1.97-.74,2.89-1.24.42-.23.84-.47,1.26-.7.1-.05.14-.11.14-.21,0-.58,0-1.15,0-1.72q0-.26-.24-.16s-.08.02-.11.04c-.65.35-1.29.7-1.93,1.06-.52.29-1.05.56-1.61.77-.13.05-.26.1-.38.14-.13.04-.27.09-.4.12-.53.15-1.08.23-1.63.27-1.04.07-2.06-.02-3.06-.33-.8-.25-1.54-.62-2.25-1.04-.72-.42-1.43-.85-2.18-1.21-1.45-.69-2.98-.99-4.59-.92-1.08.04-2.13.23-3.14.62-.71.28-1.38.62-2.04,1-.41.24-.82.49-1.22.73-.06.04-.1.07-.1.15,0,.68,0,1.36,0,2.05"/><path class="ct2" d="m42.95,33.11c0-.13-.04-.14-.15-.09-.42.2-.84.41-1.25.64-.46.26-.92.52-1.4.76-.41.21-.81.4-1.24.57-.69.27-1.4.43-2.14.49-1.09.09-2.16,0-3.21-.32-.34-.1-.65-.24-.97-.38-.27-.12-.54-.26-.8-.4-.37-.2-.73-.41-1.08-.64-.19-.12-.41-.21-.62-.33-.34-.2-.69-.38-1.05-.54-.3-.14-.6-.27-.92-.36-.33-.1-.65-.21-.99-.28-.65-.15-1.3-.21-1.97-.24-.42-.01-.85.01-1.27.05-.69.07-1.37.19-2.02.41-.43.14-.85.3-1.26.5-.26.13-.53.24-.78.38-.2.11-.41.24-.61.36-.33.19-.64.43-1,.58-.12.05-.19.13-.18.28.02.29,0,.59,0,.88,0,.32,0,.65,0,.97,0,.11.03.13.13.08.22-.11.44-.21.65-.33.42-.24.82-.5,1.24-.73.33-.18.66-.36.98-.53.3-.16.61-.3.93-.42.85-.35,1.75-.49,2.67-.52.39-.01.78.02,1.17.05.53.05,1.05.15,1.55.32.73.24,1.42.56,2.07.95.41.25.84.49,1.26.73.2.11.42.2.61.32.28.18.59.31.89.44.35.15.71.27,1.08.37.4.11.81.2,1.22.26.39.05.78.07,1.17.07.65,0,1.3,0,1.93-.1.57-.1,1.13-.22,1.67-.43.31-.12.63-.21.93-.36.37-.19.75-.36,1.11-.58.49-.29,1-.55,1.5-.82.08-.04.11-.09.11-.17,0-.63,0-1.26,0-1.89"/><path class="ct2" d="m42.95,27.54c0-.61,0-1.22,0-1.83,0-.17-.1-.22-.22-.28-.04-.02-.09-.03-.14-.06-.39-.22-.78-.44-1.18-.66-.39-.21-.77-.45-1.18-.62-.32-.13-.65-.27-.98-.38-.88-.29-1.79-.46-2.72-.51-.65-.03-1.31,0-1.96.08-.97.12-1.88.39-2.75.8-.74.34-1.43.76-2.12,1.16-.25.14-.5.28-.75.42-.63.35-1.3.63-2,.81-.72.19-1.45.25-2.19.23-.35,0-.71-.02-1.05-.07-.75-.12-1.47-.33-2.17-.65-.48-.22-.94-.47-1.4-.73-.65-.37-1.28-.77-1.96-1.09-.1-.05-.14-.06-.14.07,0,.64,0,1.29,0,1.93,0,.09.04.14.11.17.64.31,1.21.73,1.85,1.04.4.2.79.42,1.2.6.88-.33,1.75-.54,2.65-.62.35-.03.71-.05,1.06-.05.23,0,.46,0,.69.02.91.05,1.8.21,2.63.48.14.04.28.09.42.15.12-.05.23-.1.35-.15.87-.39,1.67-.9,2.49-1.37.75-.43,1.53-.8,2.37-1.03.63-.17,1.26-.25,1.91-.27.5-.02.99.02,1.48.09.06,0,.2-.02.11.13-.45.82-.63,1.71-.67,2.62-.05,1.03,0,1.72.26,2.72.03.12.09.14.19.12.58-.1,1.14-.21,1.68-.43.1-.04.13-.08.1-.18-.15-.53-.14-.75-.19-1.29,0-.32,0-.65,0-.97.02-.17.04-.33.06-.5.04-.26.11-.5.2-.74.09-.27.21-.52.38-.74.14-.18.31-.35.54-.45.46-.21,1.02-.14,1.38.16.31.26.51.76.25,1.22-.02.03-.03.06.01.08.08.05.16.12.25.16.32.17.67.3.98.49.04.03.09.06.14.04.06-.03.03-.09.03-.13"/></g></g></g></g><g class="ct7"><g class="ct9"><g class="ct5"><g class="ct6"><path class="ct2" d="m66.38,24.69v2.37c-1.16-.97-2.35-1.45-3.59-1.45-1.36,0-2.51.49-3.44,1.47-.94.97-1.41,2.16-1.41,3.57s.47,2.56,1.41,3.52c.94.96,2.09,1.43,3.45,1.43.7,0,1.3-.11,1.79-.34.27-.11.56-.27.85-.46.29-.19.61-.43.93-.7v2.41c-1.15.65-2.35.97-3.61.97-1.89,0-3.51-.66-4.85-1.98-1.33-1.33-2-2.94-2-4.83,0-1.69.56-3.19,1.67-4.52,1.37-1.62,3.15-2.43,5.33-2.43,1.19,0,2.34.32,3.45.97"/><polygon class="ct2" points="74.79 29.16 80.51 29.16 80.51 23.98 82.51 23.98 82.51 37.23 80.51 37.23 80.51 31.04 74.79 31.04 74.79 37.23 72.79 37.23 72.79 23.98 74.79 23.98 74.79 29.16"/><path class="ct2" d="m96.99,34.01h-5.67l-1.48,3.22h-2.15l6.56-14.09,6.33,14.09h-2.19l-1.39-3.22Zm-.82-1.88l-1.97-4.51-2.06,4.51h4.03Z"/><path class="ct2" d="m110.24,31.58l4.1,5.65h-2.45l-3.79-5.43h-.36v5.43h-2v-13.26h2.35c1.75,0,3.02.33,3.79.99.86.73,1.29,1.7,1.29,2.9,0,.94-.27,1.75-.81,2.42-.54.67-1.25,1.11-2.13,1.3m-2.49-1.52h.64c1.89,0,2.84-.72,2.84-2.17,0-1.36-.92-2.04-2.77-2.04h-.71v4.21Z"/><polygon class="ct2" points="121.85 23.98 121.85 35.35 125.75 35.35 125.75 37.23 119.85 37.23 119.85 23.98 121.85 23.98"/><polygon class="ct2" points="138.48 25.86 133.16 25.86 133.16 29.04 138.32 29.04 138.32 30.92 133.16 30.92 133.16 35.35 138.48 35.35 138.48 37.23 131.16 37.23 131.16 23.98 138.48 23.98 138.48 25.86"/><path class="ct2" d="m152.12,25.95l-1.62.96c-.3-.53-.59-.87-.87-1.03-.29-.18-.66-.28-1.11-.28-.55,0-1.02.16-1.38.47-.37.31-.55.7-.55,1.17,0,.65.48,1.17,1.44,1.56l1.32.54c1.08.43,1.86.97,2.36,1.59.5.63.75,1.4.75,2.3,0,1.22-.41,2.23-1.22,3.02-.82.8-1.83,1.2-3.05,1.2-1.15,0-2.1-.34-2.85-1.02-.74-.68-1.2-1.64-1.38-2.88l2.03-.45c.09.78.25,1.32.48,1.61.41.57,1.01.86,1.8.86.62,0,1.14-.21,1.55-.63.41-.42.62-.95.62-1.59,0-.26-.04-.49-.11-.71-.07-.21-.18-.41-.33-.59-.15-.18-.35-.35-.59-.51-.24-.16-.53-.31-.86-.45l-1.28-.53c-1.82-.77-2.72-1.89-2.72-3.37,0-1,.38-1.83,1.14-2.5.76-.68,1.71-1.01,2.84-1.01,1.53,0,2.72.74,3.58,2.23"/><polygon class="ct2" points="164.43 37.23 167.22 22.98 171.77 33.28 176.49 22.98 178.99 37.23 176.94 37.23 175.66 29.23 171.74 37.84 167.93 29.22 166.5 37.23 164.43 37.23"/><path class="ct2" d="m187.32,23.98v7.98c0,1.14.19,1.97.56,2.5.55.76,1.34,1.14,2.34,1.14s1.8-.38,2.35-1.14c.37-.51.56-1.34.56-2.5v-7.98h2v8.53c0,1.4-.43,2.55-1.3,3.45-.98,1.01-2.18,1.51-3.61,1.51s-2.62-.5-3.6-1.51c-.87-.9-1.31-2.05-1.31-3.45v-8.53h2Z"/><path class="ct2" d="m206.32,31.58l4.1,5.65h-2.45l-3.79-5.43h-.36v5.43h-2v-13.26h2.35c1.75,0,3.01.33,3.79.99.86.73,1.29,1.7,1.29,2.9,0,.94-.27,1.75-.81,2.42-.54.67-1.25,1.11-2.13,1.3m-2.49-1.52h.64c1.89,0,2.84-.72,2.84-2.17,0-1.36-.92-2.04-2.77-2.04h-.71v4.21Z"/><path class="ct2" d="m222.45,30.33h5.48v.44c0,1-.12,1.88-.35,2.65-.23.71-.61,1.37-1.16,1.99-1.23,1.38-2.8,2.08-4.7,2.08s-3.45-.67-4.77-2.01c-1.32-1.35-1.98-2.96-1.98-4.84s.67-3.55,2.02-4.89c1.34-1.35,2.98-2.02,4.91-2.02,1.04,0,2,.21,2.9.63.86.42,1.7,1.11,2.53,2.06l-1.43,1.37c-1.09-1.45-2.41-2.17-3.97-2.17-1.4,0-2.58.48-3.53,1.45-.95.95-1.43,2.14-1.43,3.57s.53,2.69,1.59,3.65c.99.89,2.06,1.33,3.22,1.33.98,0,1.87-.33,2.65-1,.78-.67,1.22-1.47,1.31-2.4h-3.31v-1.88Z"/><path class="ct2" d="m241.14,34.01h-5.67l-1.48,3.22h-2.15l6.56-14.09,6.33,14.09h-2.19l-1.39-3.22Zm-.82-1.88l-1.97-4.51-2.06,4.51h4.03Z"/><polygon class="ct2" points="252.82 25.86 252.82 37.23 250.82 37.23 250.82 25.86 247.77 25.86 247.77 23.98 255.86 23.98 255.86 25.86 252.82 25.86"/></g></g></g></g><text x="57" y="48" font-family="Georgia, 'Times New Roman', serif" font-size="8.5" font-style="italic" fill="#1a1a1a" textLength="199" lengthAdjust="spacing">Pisciculture familiale depuis 1898</text></svg>
+    </div>
+    <div class="header-title">Validation</div>
+    <div class="header-sub">Equipe</div>
+  </div>
+
+  <div class="section-head">
+    <div class="section-title">Equipe</div>
+    <div class="section-hint" id="teamCount"></div>
+  </div>
+
+  <div class="collab-list" id="collabList"></div>
+</div>
+
+<!-- ═══════════════ SETTINGS SCREEN ═══════════════ -->
+<div id="settingsScreen" class="app-screen">
+  <button class="back-btn" onclick="closeSettings()" title="Retour equipe">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+  </button>
+
+  <div class="header">
+    <div class="header-title">Parametres</div>
+    <div class="header-sub">Collaborateurs affiches</div>
+  </div>
+
+  <div class="settings-info">Desactivez les collaborateurs que vous ne souhaitez pas voir dans la liste.</div>
+  <div class="settings-list" id="settingsList"></div>
+</div>
+
+<!-- ═══════════════ MONTH VALIDATION SCREEN ═══════════════ -->
+<div id="validScreen" class="app-screen">
+  <button class="back-btn" onclick="goBackToTeam()" title="Retour equipe">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+  </button>
+
+  <div class="header">
+    <div class="header-logo-wrap">
+      <svg style="width:260px;height:auto;display:block;margin:0 auto" xmlns="http://www.w3.org/2000/svg" viewBox="15 21 243 38"><defs><style>.cv1{fill:none;}.cv1,.cv2{stroke-width:0px;}.cv3{clip-path:url(#cv-4);}.cv4{clip-path:url(#cv-3);}.cv5{clip-path:url(#cv-7);}.cv6{clip-path:url(#cv-8);}.cv7{clip-path:url(#cv-6);}.cv8{clip-path:url(#cv-5);}.cv9{isolation:isolate;opacity:.9;}</style><clipPath id="cv-3"><rect class="cv1" x="-497.79" y="-256.84" width="841.89" height="595.28"/></clipPath><clipPath id="cv-4"><rect class="cv1" x="17.21" y="22.44" width="26" height="28"/></clipPath><clipPath id="cv-5"><rect class="cv1" x="18.04" y="23.2" width="24.93" height="27.16"/></clipPath><clipPath id="cv-6"><rect class="cv1" x="-497.79" y="-262.85" width="841.89" height="595.28"/></clipPath><clipPath id="cv-7"><rect class="cv1" x="55.21" y="22.43" width="201" height="16"/></clipPath><clipPath id="cv-8"><rect class="cv1" x="55.92" y="22.98" width="199.93" height="14.86"/></clipPath></defs><g class="cv4"><g class="cv9"><g class="cv3"><g class="cv8"><path class="cv2" d="m41.23,26.5c0,.37-.3.68-.68.68s-.68-.3-.68-.68.3-.68.68-.68.68.3.68.68"/><path class="cv2" d="m21.21,43.25c0,.37-.3.68-.68.68s-.68-.3-.68-.68.3-.68.68-.68.68.3.68.68"/><path class="cv2" d="m42.95,37.15c0-.12-.03-.15-.15-.09-.36.18-.72.36-1.08.56-.62.35-1.24.68-1.87,1.01-.43.22-.89.4-1.36.55-.52.17-1.06.27-1.61.33-.67.07-1.33.06-1.99-.02-.63-.08-1.25-.24-1.85-.48-.42-.17-.82-.35-1.21-.56-.65-.36-1.29-.73-1.93-1.1-.44-.25-.9-.47-1.38-.66-1.07-.43-2.2-.64-3.36-.66-.61-.01-1.2.03-1.8.11-1.01.14-1.95.47-2.85.9-.82.39-1.59.89-2.38,1.34-.08.05-.1.09-.1.17,0,.64,0,1.29,0,1.93,0,.04-.02.09.04.13.07-.07.17-.11.27-.16.16-.08.34-.14.5-.24.28-.18.58-.34.87-.51.25-.15.51-.28.76-.43.58-.36,1.21-.64,1.86-.87.3-.11.62-.18.94-.24.36-.07.73-.13,1.1-.15.65-.03,1.29-.01,1.93.1.62.11,1.21.29,1.79.52.31.13.61.29.91.44.34.17.68.35,1,.55.51.33,1.05.6,1.58.88.74.38,1.52.65,2.34.83.42.08.84.16,1.26.17.59.01,1.18.03,1.76-.02.5-.04.98-.12,1.46-.24.97-.23,1.88-.63,2.75-1.1.56-.31,1.12-.62,1.68-.92.09-.05.12-.1.12-.19,0-.62,0-1.25,0-1.87"/><path class="cv2" d="m42.95,43.09c0-.65,0-1.3,0-1.94,0-.08-.02-.1-.1-.06-.49.23-.97.46-1.44.73-.57.33-1.14.65-1.72.94-.47.23-.98.39-1.49.54-.63.18-1.28.27-1.93.28-.92.02-1.82-.07-2.71-.35-.58-.19-1.12-.42-1.66-.71-.5-.26-.98-.57-1.48-.85-.3-.17-.59-.37-.91-.5-.36-.15-.71-.34-1.08-.48-.6-.23-1.22-.4-1.86-.51-.43-.07-.86-.11-1.29-.12-.84-.02-1.67.03-2.49.21-.38.08-.76.18-1.13.31-.29.1-.56.24-.85.35-.27.1-.52.24-.77.37-.53.27-1.01.62-1.55.88-.14.07-.26.16-.4.24-.07.04-.06.09-.06.15v1.94c0,.08,0,.12.11.07.46-.24.92-.47,1.36-.74.09-.05.11-.08.05-.18-.19-.33-.18-.67.03-.99.42-.66,1.46-.71,1.99-.1.28.32.46.68.57,1.07.13.45.18.91.22,1.37l-.09,1.28c-.08.41-.09.53-.21.93-.02.08,0,.09.07.12.54.21,1.1.35,1.68.44.23.03.22.04.28-.17.18-.69.24-1.1.29-1.81.08-1.25-.03-2.47-.62-3.61-.04-.07-.04-.11.06-.11.11,0,.22-.02.34-.03,1.3-.11,2.55.04,3.76.52.81.32,1.56.77,2.3,1.21.71.41,1.42.8,2.18,1.1.84-.31,1.69-.51,2.55-.58.35-.03.71-.05,1.06-.05.23,0,.46,0,.69.02.91.05,1.8.21,2.63.48.11.03.22.07.32.11.12-.05.24-.09.36-.14.29-.12.57-.25.85-.39.18-.09.36-.19.54-.3.48-.28.97-.54,1.46-.81.05-.03.08-.08.08-.13"/><path class="cv2" d="m42.95,48.34c0-.35,0-.64,0-.92,0-.11,0-.19-.13-.25-.07-.04-.14-.06-.21-.1-.25-.15-.51-.29-.77-.43-.44-.24-.88-.5-1.33-.71-.36-.17-.73-.33-1.1-.47-.04-.01-.07-.03-.11-.04-.07-.02-.13-.05-.2-.07-.18-.06-.36-.11-.54-.15-.01,0-.02,0-.03,0-.61-.15-1.23-.24-1.85-.28-.22-.01-.44-.02-.65-.02-.33,0-.67.01-1,.04-1.2.11-2.32.45-3.39.98-.84.41-1.64.91-2.46,1.35-.04.02-.09.05-.13.07-1.09.59-2.24.97-3.5,1.05-1.55.1-3.01-.18-4.39-.88-.47-.24-.93-.5-1.39-.77-.27-.16-.53-.33-.81-.47-.24-.12-.48-.25-.72-.39-.05-.03-.07-.08-.14-.05-.07.03-.04.08-.04.13,0,.63,0,1.25,0,1.88,0,.1.04.16.12.19.22.09.4.23.61.34.3.16.58.35.88.51.47.27.95.49,1.44.72.48.22.99.39,1.51.51.51.12,1.03.21,1.55.22.55,0,1.11.06,1.67,0,.44-.04.86-.11,1.29-.2.8-.17,1.55-.45,2.28-.82.43-.22.87-.43,1.28-.68.29-.18.59-.35.88-.53.33-.19.67-.37,1.02-.53.51-.24,1.04-.41,1.59-.54.45-.1.9-.15,1.35-.19.47-.04.95-.03,1.42.04.36.05.73.1,1.09.18.67.15,1.31.41,1.92.71.48.23.94.51,1.4.77.31.17.61.35.93.51.2.1.4.21.61.28.06.02.12.02.11-.05-.05-.34,0-.67-.02-.95"/><path class="cv2" d="m18.04,32.53c.22-.11.44-.2.64-.32.67-.4,1.35-.77,2.02-1.15.34-.2.7-.37,1.06-.52.53-.22,1.07-.39,1.65-.48.47-.07.95-.12,1.43-.14.31-.01.62.03.93.05.27.02.54.05.81.1.67.13,1.31.37,1.94.66.1.05.21.08.3.14.27.18.57.33.85.5.35.2.7.41,1.05.6.34.18.67.38,1.02.54.37.16.74.31,1.12.44.35.12.71.23,1.07.31.46.09.93.16,1.4.16.6,0,1.2.03,1.79-.03.52-.05,1.03-.15,1.53-.28,1.03-.27,1.97-.74,2.89-1.24.42-.23.84-.47,1.26-.7.1-.05.14-.11.14-.21,0-.58,0-1.15,0-1.72q0-.26-.24-.16s-.08.02-.11.04c-.65.35-1.29.7-1.93,1.06-.52.29-1.05.56-1.61.77-.13.05-.26.1-.38.14-.13.04-.27.09-.4.12-.53.15-1.08.23-1.63.27-1.04.07-2.06-.02-3.06-.33-.8-.25-1.54-.62-2.25-1.04-.72-.42-1.43-.85-2.18-1.21-1.45-.69-2.98-.99-4.59-.92-1.08.04-2.13.23-3.14.62-.71.28-1.38.62-2.04,1-.41.24-.82.49-1.22.73-.06.04-.1.07-.1.15,0,.68,0,1.36,0,2.05"/><path class="cv2" d="m42.95,33.11c0-.13-.04-.14-.15-.09-.42.2-.84.41-1.25.64-.46.26-.92.52-1.4.76-.41.21-.81.4-1.24.57-.69.27-1.4.43-2.14.49-1.09.09-2.16,0-3.21-.32-.34-.1-.65-.24-.97-.38-.27-.12-.54-.26-.8-.4-.37-.2-.73-.41-1.08-.64-.19-.12-.41-.21-.62-.33-.34-.2-.69-.38-1.05-.54-.3-.14-.6-.27-.92-.36-.33-.1-.65-.21-.99-.28-.65-.15-1.3-.21-1.97-.24-.42-.01-.85.01-1.27.05-.69.07-1.37.19-2.02.41-.43.14-.85.3-1.26.5-.26.13-.53.24-.78.38-.2.11-.41.24-.61.36-.33.19-.64.43-1,.58-.12.05-.19.13-.18.28.02.29,0,.59,0,.88,0,.32,0,.65,0,.97,0,.11.03.13.13.08.22-.11.44-.21.65-.33.42-.24.82-.5,1.24-.73.33-.18.66-.36.98-.53.3-.16.61-.3.93-.42.85-.35,1.75-.49,2.67-.52.39-.01.78.02,1.17.05.53.05,1.05.15,1.55.32.73.24,1.42.56,2.07.95.41.25.84.49,1.26.73.2.11.42.2.61.32.28.18.59.31.89.44.35.15.71.27,1.08.37.4.11.81.2,1.22.26.39.05.78.07,1.17.07.65,0,1.3,0,1.93-.1.57-.1,1.13-.22,1.67-.43.31-.12.63-.21.93-.36.37-.19.75-.36,1.11-.58.49-.29,1-.55,1.5-.82.08-.04.11-.09.11-.17,0-.63,0-1.26,0-1.89"/><path class="cv2" d="m42.95,27.54c0-.61,0-1.22,0-1.83,0-.17-.1-.22-.22-.28-.04-.02-.09-.03-.14-.06-.39-.22-.78-.44-1.18-.66-.39-.21-.77-.45-1.18-.62-.32-.13-.65-.27-.98-.38-.88-.29-1.79-.46-2.72-.51-.65-.03-1.31,0-1.96.08-.97.12-1.88.39-2.75.8-.74.34-1.43.76-2.12,1.16-.25.14-.5.28-.75.42-.63.35-1.3.63-2,.81-.72.19-1.45.25-2.19.23-.35,0-.71-.02-1.05-.07-.75-.12-1.47-.33-2.17-.65-.48-.22-.94-.47-1.4-.73-.65-.37-1.28-.77-1.96-1.09-.1-.05-.14-.06-.14.07,0,.64,0,1.29,0,1.93,0,.09.04.14.11.17.64.31,1.21.73,1.85,1.04.4.2.79.42,1.2.6.88-.33,1.75-.54,2.65-.62.35-.03.71-.05,1.06-.05.23,0,.46,0,.69.02.91.05,1.8.21,2.63.48.14.04.28.09.42.15.12-.05.23-.1.35-.15.87-.39,1.67-.9,2.49-1.37.75-.43,1.53-.8,2.37-1.03.63-.17,1.26-.25,1.91-.27.5-.02.99.02,1.48.09.06,0,.2-.02.11.13-.45.82-.63,1.71-.67,2.62-.05,1.03,0,1.72.26,2.72.03.12.09.14.19.12.58-.1,1.14-.21,1.68-.43.1-.04.13-.08.1-.18-.15-.53-.14-.75-.19-1.29,0-.32,0-.65,0-.97.02-.17.04-.33.06-.5.04-.26.11-.5.2-.74.09-.27.21-.52.38-.74.14-.18.31-.35.54-.45.46-.21,1.02-.14,1.38.16.31.26.51.76.25,1.22-.02.03-.03.06.01.08.08.05.16.12.25.16.32.17.67.3.98.49.04.03.09.06.14.04.06-.03.03-.09.03-.13"/></g></g></g></g><g class="cv7"><g class="cv9"><g class="cv5"><g class="cv6"><path class="cv2" d="m66.38,24.69v2.37c-1.16-.97-2.35-1.45-3.59-1.45-1.36,0-2.51.49-3.44,1.47-.94.97-1.41,2.16-1.41,3.57s.47,2.56,1.41,3.52c.94.96,2.09,1.43,3.45,1.43.7,0,1.3-.11,1.79-.34.27-.11.56-.27.85-.46.29-.19.61-.43.93-.7v2.41c-1.15.65-2.35.97-3.61.97-1.89,0-3.51-.66-4.85-1.98-1.33-1.33-2-2.94-2-4.83,0-1.69.56-3.19,1.67-4.52,1.37-1.62,3.15-2.43,5.33-2.43,1.19,0,2.34.32,3.45.97"/><polygon class="cv2" points="74.79 29.16 80.51 29.16 80.51 23.98 82.51 23.98 82.51 37.23 80.51 37.23 80.51 31.04 74.79 31.04 74.79 37.23 72.79 37.23 72.79 23.98 74.79 23.98 74.79 29.16"/><path class="cv2" d="m96.99,34.01h-5.67l-1.48,3.22h-2.15l6.56-14.09,6.33,14.09h-2.19l-1.39-3.22Zm-.82-1.88l-1.97-4.51-2.06,4.51h4.03Z"/><path class="cv2" d="m110.24,31.58l4.1,5.65h-2.45l-3.79-5.43h-.36v5.43h-2v-13.26h2.35c1.75,0,3.02.33,3.79.99.86.73,1.29,1.7,1.29,2.9,0,.94-.27,1.75-.81,2.42-.54.67-1.25,1.11-2.13,1.3m-2.49-1.52h.64c1.89,0,2.84-.72,2.84-2.17,0-1.36-.92-2.04-2.77-2.04h-.71v4.21Z"/><polygon class="cv2" points="121.85 23.98 121.85 35.35 125.75 35.35 125.75 37.23 119.85 37.23 119.85 23.98 121.85 23.98"/><polygon class="cv2" points="138.48 25.86 133.16 25.86 133.16 29.04 138.32 29.04 138.32 30.92 133.16 30.92 133.16 35.35 138.48 35.35 138.48 37.23 131.16 37.23 131.16 23.98 138.48 23.98 138.48 25.86"/><path class="cv2" d="m152.12,25.95l-1.62.96c-.3-.53-.59-.87-.87-1.03-.29-.18-.66-.28-1.11-.28-.55,0-1.02.16-1.38.47-.37.31-.55.7-.55,1.17,0,.65.48,1.17,1.44,1.56l1.32.54c1.08.43,1.86.97,2.36,1.59.5.63.75,1.4.75,2.3,0,1.22-.41,2.23-1.22,3.02-.82.8-1.83,1.2-3.05,1.2-1.15,0-2.1-.34-2.85-1.02-.74-.68-1.2-1.64-1.38-2.88l2.03-.45c.09.78.25,1.32.48,1.61.41.57,1.01.86,1.8.86.62,0,1.14-.21,1.55-.63.41-.42.62-.95.62-1.59,0-.26-.04-.49-.11-.71-.07-.21-.18-.41-.33-.59-.15-.18-.35-.35-.59-.51-.24-.16-.53-.31-.86-.45l-1.28-.53c-1.82-.77-2.72-1.89-2.72-3.37,0-1,.38-1.83,1.14-2.5.76-.68,1.71-1.01,2.84-1.01,1.53,0,2.72.74,3.58,2.23"/><polygon class="cv2" points="164.43 37.23 167.22 22.98 171.77 33.28 176.49 22.98 178.99 37.23 176.94 37.23 175.66 29.23 171.74 37.84 167.93 29.22 166.5 37.23 164.43 37.23"/><path class="cv2" d="m187.32,23.98v7.98c0,1.14.19,1.97.56,2.5.55.76,1.34,1.14,2.34,1.14s1.8-.38,2.35-1.14c.37-.51.56-1.34.56-2.5v-7.98h2v8.53c0,1.4-.43,2.55-1.3,3.45-.98,1.01-2.18,1.51-3.61,1.51s-2.62-.5-3.6-1.51c-.87-.9-1.31-2.05-1.31-3.45v-8.53h2Z"/><path class="cv2" d="m206.32,31.58l4.1,5.65h-2.45l-3.79-5.43h-.36v5.43h-2v-13.26h2.35c1.75,0,3.01.33,3.79.99.86.73,1.29,1.7,1.29,2.9,0,.94-.27,1.75-.81,2.42-.54.67-1.25,1.11-2.13,1.3m-2.49-1.52h.64c1.89,0,2.84-.72,2.84-2.17,0-1.36-.92-2.04-2.77-2.04h-.71v4.21Z"/><path class="cv2" d="m222.45,30.33h5.48v.44c0,1-.12,1.88-.35,2.65-.23.71-.61,1.37-1.16,1.99-1.23,1.38-2.8,2.08-4.7,2.08s-3.45-.67-4.77-2.01c-1.32-1.35-1.98-2.96-1.98-4.84s.67-3.55,2.02-4.89c1.34-1.35,2.98-2.02,4.91-2.02,1.04,0,2,.21,2.9.63.86.42,1.7,1.11,2.53,2.06l-1.43,1.37c-1.09-1.45-2.41-2.17-3.97-2.17-1.4,0-2.58.48-3.53,1.45-.95.95-1.43,2.14-1.43,3.57s.53,2.69,1.59,3.65c.99.89,2.06,1.33,3.22,1.33.98,0,1.87-.33,2.65-1,.78-.67,1.22-1.47,1.31-2.4h-3.31v-1.88Z"/><path class="cv2" d="m241.14,34.01h-5.67l-1.48,3.22h-2.15l6.56-14.09,6.33,14.09h-2.19l-1.39-3.22Zm-.82-1.88l-1.97-4.51-2.06,4.51h4.03Z"/><polygon class="cv2" points="252.82 25.86 252.82 37.23 250.82 37.23 250.82 25.86 247.77 25.86 247.77 23.98 255.86 23.98 255.86 25.86 252.82 25.86"/></g></g></g></g><text x="57" y="48" font-family="Georgia, 'Times New Roman', serif" font-size="8.5" font-style="italic" fill="#1a1a1a" textLength="199" lengthAdjust="spacing">Pisciculture familiale depuis 1898</text></svg>
+    </div>
+    <div class="header-title">Validation</div>
+    <div class="header-sub">Responsables</div>
+  </div>
+
+  <div class="valid-collab-name" id="validCollabName"></div>
+  <div class="valid-last-sync" id="validLastSync"></div>
+
+  <!-- Month navigation -->
+  <div class="month-nav">
+    <button class="month-nav-btn" onclick="changeMonth(-1)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <div class="month-label" id="monthLabel"></div>
+    <button class="month-nav-btn" onclick="changeMonth(1)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+    </button>
+  </div>
+
+  <!-- Select all -->
+  <div class="select-all-wrap">
+    <input type="checkbox" class="select-all-cb" id="selectAllCb" onchange="toggleSelectAll()">
+    <label class="select-all-label" for="selectAllCb">Tout cocher</label>
+  </div>
+
+  <!-- Days -->
+  <div class="days-list" id="daysList"></div>
+
+  <!-- Total -->
+  <div class="total-bar">
+    <div class="total-label">Total selectionne</div>
+    <div class="total-value" id="totalSelected">0 jour(s)</div>
+  </div>
+
+  <!-- Validate -->
+  <div class="validate-wrap">
+    <button class="validate-btn" id="validateBtn" onclick="doValidate()">Valider la selection</button>
+  </div>
+  <div class="validate-result" id="validateResult"></div>
+</div>
+
+<!-- ═══════════════ VALIDATION OVERLAY ═══════════════ -->
+<div class="overlay" id="validOverlay">
+  <div class="overlay-box">
+    <div class="overlay-title" id="overlayTitle">Validation en cours</div>
+    <div class="overlay-steps" id="overlaySteps">
+      <span class="overlay-step active" id="step1"><span class="step-icon">&#9203;</span> Connexion a eCollaboratrice</span>
+      <span class="overlay-step" id="step2"><span class="step-icon">&#9203;</span> Validation des jours</span>
+      <span class="overlay-step" id="step3"><span class="step-icon">&#9203;</span> Sauvegarde</span>
+    </div>
+    <div class="overlay-msg" id="overlayMsg"></div>
+    <div class="overlay-actions" id="overlayActions">
+      <button class="overlay-btn overlay-btn-cancel" id="overlayCancel" onclick="cancelValidation()">Annuler</button>
+    </div>
+  </div>
+</div>
+
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// VALIDE ECOLLAB — PWA MANAGER
+// ═══════════════════════════════════════════════════════════════════════════
+
+var CFG = { email: '', password: '', url: '', server: '' };
+var COLLABS = [];
+var CURRENT_COLLAB = null;
+var CURRENT_MOIS = new Date().getMonth() + 1;
+var CURRENT_ANNEE = new Date().getFullYear();
+var MONTH_DATA = {};  // {dateISO: {plages, travaille, valideSalarie, valideEntreprise, totalHeures}}
+var _validAbort = null;
+
+var MOIS_NOMS = ['', 'Janvier', 'Fevrier', 'Mars', 'Avril', 'Mai', 'Juin',
+                 'Juillet', 'Aout', 'Septembre', 'Octobre', 'Novembre', 'Decembre'];
+var JOUR_NOMS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+var MOIS_NOMS_COURTS = ['janv.', 'fev.', 'mars', 'avr.', 'mai', 'juin',
+                        'juil.', 'aout', 'sept.', 'oct.', 'nov.', 'dec.'];
+
+// ─── UTILS ──────────────────────────────────────────────────────────────────
+
+function formatCollabName(collab) {
+  if (!collab) return '';
+  var prenom = collab.prenom || '';
+  var nom = collab.nom || '';
+  if (prenom && nom) {
+    prenom = prenom.charAt(0).toUpperCase() + prenom.slice(1).toLowerCase();
+    return prenom + ' ' + nom;
+  }
+  // fullName seul : les mots tout en MAJ = nom, le reste = prénom
+  var full = collab.fullName || '';
+  if (!full) return '';
+  var parts = full.split(/\s+/);
+  var result = [];
+  for (var i = 0; i < parts.length; i++) {
+    var w = parts[i];
+    if (w === w.toUpperCase() && w.length > 1) {
+      result.push(w); // NOM reste en majuscules
+    } else {
+      result.push(w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+    }
+  }
+  return result.join(' ');
+}
+
+function showLoading(msg) {
+  document.getElementById('loadingText').textContent = msg || 'Chargement...';
+  document.getElementById('loadingBanner').classList.add('visible');
+  document.body.classList.add('has-banner');
+}
+function hideLoading() {
+  document.getElementById('loadingBanner').classList.remove('visible');
+  document.body.classList.remove('has-banner');
+}
+
+function minToHHMM(m) {
+  return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+}
+
+function getISOWeek(d) {
+  var date = new Date(d.getTime());
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() + 3 - ((date.getDay() + 6) % 7));
+  var week1 = new Date(date.getFullYear(), 0, 4);
+  return 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
+}
+
+// ─── STORAGE ────────────────────────────────────────────────────────────────
+
+function loadCfg() {
+  try {
+    CFG.email    = localStorage.getItem('vm_email') || '';
+    CFG.password = localStorage.getItem('vm_pwd') || '';
+    CFG.url      = localStorage.getItem('vm_url') || '';
+    CFG.server   = localStorage.getItem('vm_server') || '';
+  } catch(e) {}
+}
+
+function saveCfg() {
+  try {
+    localStorage.setItem('vm_email', CFG.email);
+    localStorage.setItem('vm_pwd', CFG.password);
+    localStorage.setItem('vm_url', CFG.url);
+    localStorage.setItem('vm_server', CFG.server);
+  } catch(e) {}
+}
+
+function clearCfg() {
+  try {
+    localStorage.removeItem('vm_email');
+    localStorage.removeItem('vm_pwd');
+    localStorage.removeItem('vm_url');
+    localStorage.removeItem('vm_server');
+    localStorage.removeItem('vm_collabs');
+  } catch(e) {}
+}
+
+function cacheCollabs(list) {
+  try { localStorage.setItem('vm_collabs', JSON.stringify(list)); } catch(e) {}
+}
+function loadCachedCollabs() {
+  try { return JSON.parse(localStorage.getItem('vm_collabs') || '[]'); } catch(e) { return []; }
+}
+
+// ─── SCREENS ────────────────────────────────────────────────────────────────
+
+function showScreen(id) {
+  document.getElementById('loginScreen').classList.remove('show');
+  document.getElementById('teamScreen').classList.remove('active');
+  document.getElementById('settingsScreen').classList.remove('active');
+  document.getElementById('validScreen').classList.remove('active');
+
+  if (id === 'login') {
+    document.getElementById('loginScreen').classList.add('show');
+  } else if (id === 'team') {
+    document.getElementById('teamScreen').classList.add('active');
+  } else if (id === 'settings') {
+    document.getElementById('settingsScreen').classList.add('active');
+  } else if (id === 'valid') {
+    document.getElementById('validScreen').classList.add('active');
+  }
+}
+
+// ─── LOGIN ──────────────────────────────────────────────────────────────────
+
+async function doLogin() {
+  var email    = document.getElementById('loginEmail').value.trim();
+  var password = document.getElementById('loginPassword').value.trim();
+  var url      = document.getElementById('loginUrl').value.trim();
+  var server   = document.getElementById('loginServer').value.trim();
+
+  if (!email || !password || !url || !server) {
+    showLoginError('Veuillez remplir tous les champs');
+    return;
+  }
+
+  document.getElementById('loginBtn').disabled = true;
+  document.getElementById('loginError').classList.remove('show');
+  showLoading('Verification des identifiants...');
+
+  try {
+    var resp = await fetch(server + '/test-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email, password: password, url: url })
+    });
+    var data = await resp.json();
+
+    if (data.success) {
+      CFG.email = email;
+      CFG.password = password;
+      CFG.url = url;
+      CFG.server = server;
+      saveCfg();
+      hideLoading();
+      loadTeamScreen();
+    } else {
+      hideLoading();
+      showLoginError(data.error || 'Identifiants incorrects');
+    }
+  } catch(e) {
+    hideLoading();
+    showLoginError('Impossible de joindre le serveur : ' + e.message);
+  }
+
+  document.getElementById('loginBtn').disabled = false;
+}
+
+function showLoginError(msg) {
+  var el = document.getElementById('loginError');
+  el.textContent = msg;
+  el.classList.add('show');
+}
+
+function doLogout() {
+  clearCfg();
+  CFG = { email: '', password: '', url: '', server: '' };
+  COLLABS = [];
+  CURRENT_COLLAB = null;
+  MONTH_DATA = {};
+  document.getElementById('loginEmail').value = '';
+  document.getElementById('loginPassword').value = '';
+  showScreen('login');
+}
+
+// ─── TEAM SCREEN ────────────────────────────────────────────────────────────
+
+async function loadTeamScreen(forceReloadTeam) {
+  showScreen('team');
+
+  // Utiliser le cache si disponible
+  var cached = loadCachedCollabs();
+  if (cached.length > 0 && !forceReloadTeam) {
+    COLLABS = cached;
+    renderCollabs();
+    // Passer directement à la synchro des données
+    syncAllCollabs();
+    return;
+  }
+
+  // Sinon charger l'équipe depuis le serveur
+  showLoading('Chargement de l\'equipe...');
+  try {
+    var resp = await fetch(CFG.server + '/fetch-collaborateurs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: CFG.email, password: CFG.password, url: CFG.url })
+    });
+    var data = await resp.json();
+
+    if (data.success && data.collaborateurs) {
+      COLLABS = data.collaborateurs;
+      cacheCollabs(COLLABS);
+      renderCollabs();
+    } else {
+      document.getElementById('collabList').innerHTML =
+        '<div class="collab-empty">Impossible de charger l\'equipe.<br>' +
+        (data.error || '') + '</div>';
+    }
+  } catch(e) {
+    document.getElementById('collabList').innerHTML =
+      '<div class="collab-empty">Erreur de connexion au serveur.</div>';
+  }
+  hideLoading();
+
+  // Synchroniser automatiquement tous les collaborateurs visibles
+  if (COLLABS.length > 0) {
+    syncAllCollabs();
+  }
+}
+
+function getHiddenCollabs() {
+  try { return JSON.parse(localStorage.getItem('vm_hidden_collabs') || '[]'); } catch(e) { return []; }
+}
+function setHiddenCollabs(list) {
+  try { localStorage.setItem('vm_hidden_collabs', JSON.stringify(list)); } catch(e) {}
+}
+
+function renderCollabs() {
+  var hidden = getHiddenCollabs();
+  var visible = [];
+  for (var i = 0; i < COLLABS.length; i++) {
+    var c = COLLABS[i];
+    var cid = String(c.id || c.fullName || i);
+    if (hidden.indexOf(cid) === -1) visible.push({collab: c, idx: i});
+  }
+
+  var html = '';
+  document.getElementById('teamCount').textContent = visible.length + ' collaborateur' + (visible.length > 1 ? 's' : '');
+
+  // Afficher dernière synchro
+  var syncTs = getSyncTimestamp();
+  if (syncTs) {
+    html += '<div class="sync-info">Dernier chargement : ' + formatSyncDate(syncTs) + '</div>';
+  }
+
+  for (var v = 0; v < visible.length; v++) {
+    var c = visible[v].collab;
+    var idx = visible[v].idx;
+    var name = formatCollabName(c) || 'Collaborateur ' + (idx + 1);
+
+    // Résumé synchro si disponible
+    var syncInfo = '';
+    var cached = SYNC_CACHE[c.id];
+    if (cached && cached.days) {
+      var totalH = 0, nbValide = 0, nbJours = 0;
+      for (var dk in cached.days) {
+        var dd = cached.days[dk];
+        if (dd.travaille) {
+          nbJours++;
+          totalH += (dd.totalHeures || 0);
+          if (dd.valideEntreprise) nbValide++;
+        }
+      }
+      var hh = Math.floor(totalH / 60);
+      var mm = totalH % 60;
+      syncInfo = '<span class="collab-sync">' + hh + 'h' + (mm > 0 ? String(mm).padStart(2, '0') : '') +
+                 ' — ' + nbValide + '/' + nbJours + ' valides</span>';
+    }
+
+    html += '<div class="collab-card" onclick="selectCollab(' + idx + ')">' +
+            '<div class="collab-card-left"><span class="collab-name">' + escHtml(name) + '</span>' +
+            (syncInfo ? syncInfo : '') + '</div>' +
+            '<span class="collab-arrow">&rsaquo;</span>' +
+            '</div>';
+  }
+
+  document.getElementById('collabList').innerHTML = html || '<div class="collab-empty">Aucun collaborateur trouve.</div>';
+}
+
+function escHtml(s) {
+  var d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// ─── SYNC ALL COLLABS ──────────────────────────────────────────────────────
+
+var SYNC_CACHE = {}; // { collabId: { mois, annee, days, nomSalarie, timestamp } }
+
+async function syncAllCollabs() {
+  var hidden = getHiddenCollabs();
+  var visibles = [];
+  for (var i = 0; i < COLLABS.length; i++) {
+    var c = COLLABS[i];
+    var cid = String(c.id || c.fullName || i);
+    if (hidden.indexOf(cid) === -1) visibles.push(c);
+  }
+  if (visibles.length === 0) return;
+
+  var btn = document.getElementById('syncBtn');
+  if (btn) btn.classList.add('syncing');
+
+  var mois = new Date().getMonth() + 1;
+  var annee = new Date().getFullYear();
+  var total = visibles.length;
+
+  // Appels individuels avec progression visible
+  for (var v = 0; v < visibles.length; v++) {
+    var c = visibles[v];
+    var name = formatCollabName(c);
+    showLoading('Synchronisation ' + (v + 1) + '/' + total + ' — ' + name);
+    try {
+      var resp = await fetch(CFG.server + '/fetch-mois', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: CFG.email, password: CFG.password, url: CFG.url,
+          salarieId: c.id, mois: mois, annee: annee
+        })
+      });
+      var data = await resp.json();
+      if (data.success) {
+        SYNC_CACHE[c.id] = {
+          mois: mois, annee: annee,
+          days: data.days || {},
+          nomSalarie: data.nomSalarie || name,
+          timestamp: new Date().toISOString()
+        };
+        renderCollabs();
+      }
+    } catch(e) { console.error('Sync error', name, e); }
+  }
+
+  try { localStorage.setItem('vm_sync_cache', JSON.stringify(SYNC_CACHE)); } catch(e) {}
+  if (btn) btn.classList.remove('syncing');
+  hideLoading();
+  renderCollabs();
+}
+
+function loadSyncCache() {
+  try { SYNC_CACHE = JSON.parse(localStorage.getItem('vm_sync_cache') || '{}'); } catch(e) { SYNC_CACHE = {}; }
+}
+
+function formatSyncDate(isoStr) {
+  if (!isoStr) return '';
+  var d = new Date(isoStr);
+  return String(d.getDate()).padStart(2, '0') + '/' +
+         String(d.getMonth() + 1).padStart(2, '0') + '/' +
+         d.getFullYear() + ' a ' +
+         String(d.getHours()).padStart(2, '0') + ':' +
+         String(d.getMinutes()).padStart(2, '0');
+}
+
+function updateValidLastSync(isoStr) {
+  var el = document.getElementById('validLastSync');
+  if (!el) return;
+  if (isoStr) {
+    el.textContent = 'Derniere synchro : ' + formatSyncDate(isoStr);
+  } else {
+    el.textContent = '';
+  }
+}
+
+function getSyncTimestamp() {
+  var latest = null;
+  for (var k in SYNC_CACHE) {
+    var ts = SYNC_CACHE[k].timestamp;
+    if (!latest || ts > latest) latest = ts;
+  }
+  return latest;
+}
+
+// ─── SETTINGS ──────────────────────────────────────────────────────────────
+
+function openSettings() {
+  showScreen('settings');
+  renderSettings();
+}
+
+function closeSettings() {
+  showScreen('team');
+  renderCollabs();
+}
+
+function renderSettings() {
+  var hidden = getHiddenCollabs();
+  var html = '';
+  for (var i = 0; i < COLLABS.length; i++) {
+    var c = COLLABS[i];
+    var cid = String(c.id || c.fullName || i);
+    var name = formatCollabName(c) || 'Collaborateur ' + (i + 1);
+    var isOn = hidden.indexOf(cid) === -1;
+    html += '<div class="settings-item" onclick="toggleCollab(\'' + cid.replace(/'/g, "\\'") + '\')">' +
+            '<span class="settings-item-name">' + escHtml(name) + '</span>' +
+            '<div class="settings-toggle' + (isOn ? ' on' : '') + '" data-cid="' + escHtml(cid) + '"></div>' +
+            '</div>';
+  }
+  document.getElementById('settingsList').innerHTML = html || '<div class="collab-empty">Aucun collaborateur.</div>';
+}
+
+function toggleCollab(cid) {
+  var hidden = getHiddenCollabs();
+  var idx = hidden.indexOf(cid);
+  if (idx === -1) {
+    hidden.push(cid);
+  } else {
+    hidden.splice(idx, 1);
+  }
+  setHiddenCollabs(hidden);
+  renderSettings();
+}
+
+// ─── VALIDATION SCREEN ──────────────────────────────────────────────────────
+
+async function selectCollab(idx) {
+  CURRENT_COLLAB = COLLABS[idx];
+  CURRENT_MOIS = new Date().getMonth() + 1;
+  CURRENT_ANNEE = new Date().getFullYear();
+
+  showScreen('valid');
+  var name = formatCollabName(CURRENT_COLLAB);
+  document.getElementById('validCollabName').textContent = name;
+  document.getElementById('validateResult').className = 'validate-result';
+  document.getElementById('validateResult').style.display = 'none';
+  document.getElementById('monthLabel').textContent = MOIS_NOMS[CURRENT_MOIS] + ' ' + CURRENT_ANNEE;
+
+  // Afficher le cache immédiatement si disponible
+  var cached = SYNC_CACHE[CURRENT_COLLAB.id];
+  if (cached && cached.mois === CURRENT_MOIS && cached.annee === CURRENT_ANNEE && cached.days) {
+    MONTH_DATA = cached.days;
+    if (cached.nomSalarie) document.getElementById('validCollabName').textContent = cached.nomSalarie;
+    updateValidLastSync(cached.timestamp);
+    renderDays();
+    // Ne pas relancer la synchro, les données sont déjà là
+  } else {
+    MONTH_DATA = {};
+    await loadMonth();
+  }
+}
+
+function goBackToTeam() {
+  CURRENT_COLLAB = null;
+  MONTH_DATA = {};
+  showScreen('team');
+}
+
+function changeMonth(delta) {
+  CURRENT_MOIS += delta;
+  if (CURRENT_MOIS > 12) { CURRENT_MOIS = 1; CURRENT_ANNEE++; }
+  if (CURRENT_MOIS < 1)  { CURRENT_MOIS = 12; CURRENT_ANNEE--; }
+  document.getElementById('validateResult').className = 'validate-result';
+  document.getElementById('validateResult').style.display = 'none';
+  loadMonth();
+}
+
+async function loadMonth() {
+  document.getElementById('monthLabel').textContent = MOIS_NOMS[CURRENT_MOIS] + ' ' + CURRENT_ANNEE;
+  // Ne pas vider la liste si on a déjà des données affichées (cache)
+  var hadCache = Object.keys(MONTH_DATA).length > 0;
+  if (!hadCache) {
+    document.getElementById('daysList').innerHTML = '';
+    document.getElementById('selectAllCb').checked = false;
+    updateTotalSelected();
+  }
+
+  showLoading('Mise a jour...');
+
+  try {
+    var resp = await fetch(CFG.server + '/fetch-mois', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: CFG.email,
+        password: CFG.password,
+        url: CFG.url,
+        salarieId: CURRENT_COLLAB.id,
+        mois: CURRENT_MOIS,
+        annee: CURRENT_ANNEE
+      })
+    });
+    var data = await resp.json();
+
+    if (data.success) {
+      MONTH_DATA = data.days || {};
+      if (data.nomSalarie) {
+        document.getElementById('validCollabName').textContent = data.nomSalarie;
+      }
+      // Sauvegarder en cache
+      var nowIso = new Date().toISOString();
+      SYNC_CACHE[CURRENT_COLLAB.id] = {
+        mois: CURRENT_MOIS,
+        annee: CURRENT_ANNEE,
+        days: MONTH_DATA,
+        nomSalarie: data.nomSalarie || '',
+        timestamp: nowIso
+      };
+      try { localStorage.setItem('vm_sync_cache', JSON.stringify(SYNC_CACHE)); } catch(e) {}
+      updateValidLastSync(nowIso);
+      renderDays();
+    } else {
+      document.getElementById('daysList').innerHTML =
+        '<div class="collab-empty">Erreur : ' + escHtml(data.error || 'Inconnu') + '</div>';
+    }
+  } catch(e) {
+    document.getElementById('daysList').innerHTML =
+      '<div class="collab-empty">Erreur de connexion au serveur.</div>';
+  }
+
+  hideLoading();
+}
+
+function renderDays() {
+  var html = '';
+  var daysInMonth = new Date(CURRENT_ANNEE, CURRENT_MOIS, 0).getDate();
+  var lastWeek = -1;
+
+  for (var d = 1; d <= daysInMonth; d++) {
+    var dateStr = CURRENT_ANNEE + '-' + String(CURRENT_MOIS).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    var dateObj = new Date(CURRENT_ANNEE, CURRENT_MOIS - 1, d);
+    var dow = dateObj.getDay(); // 0=dim
+    var jourNom = JOUR_NOMS[dow];
+    var week = getISOWeek(dateObj);
+
+    // Week separator
+    if (week !== lastWeek) {
+      if (lastWeek !== -1) {
+        html += '<div class="week-separator">Semaine ' + week + '</div>';
+      } else {
+        html += '<div class="week-separator">Semaine ' + week + '</div>';
+      }
+      lastWeek = week;
+    }
+
+    var dayData = MONTH_DATA[dateStr] || {};
+    var isWeekend = dow === 0 || dow === 6;
+    var hasTravaille = dayData.travaille;
+    var hasPlages = dayData.plages && dayData.plages.length > 0;
+    var isValideSalarie = dayData.valideSalarie;
+    var isValideEntreprise = dayData.valideEntreprise;
+
+    // CSS classes
+    var rowClass = 'day-row';
+    // Détecter congé dans TOUTES les sources possibles
+    var allTexts = (dayData.variable || '') + '|' + (dayData.variables || '');
+    if (dayData.taches) allTexts += '|' + dayData.taches.join('|');
+    var allLower = allTexts.toLowerCase();
+    var isConge = allLower.indexOf('cong') > -1 || allLower.indexOf('rtt') > -1 || allLower.indexOf('maladie') > -1 || allLower.indexOf('absence') > -1;
+    if (isWeekend && !hasTravaille) rowClass += ' weekend';
+    else if (isConge) rowClass += ' conge';
+    else if (!hasTravaille && !hasPlages) rowClass += ' no-work';
+    else if (isValideSalarie && dayData.totalHeures && dayData.totalHeures === 420) rowClass += ' exact-hours';
+    else if (isValideSalarie && dayData.totalHeures && dayData.totalHeures > 420) rowClass += ' over-hours';
+    else if (isValideSalarie && dayData.totalHeures && dayData.totalHeures < 420 && dayData.travaille) rowClass += ' under-hours';
+    // sinon: blanc = non validé par le salarié
+
+    // Checkbox: si le salarié a validé et pas encore entreprise (même sans heures)
+    var canCheck = isValideSalarie && !isValideEntreprise;
+    var isChecked = isValideEntreprise;
+
+    // Plages text + barres visuelles avec tâches SUR les barres
+    var plagesText = '';
+    var plagesBars = '';
+    // Pour les absences plein jour sans plages : créer une plage virtuelle 8h-17h
+    var displayPlages = hasPlages ? dayData.plages : [];
+    if (!hasPlages && isConge && dayData.variable) {
+      displayPlages = [{debut: '08:00', fin: '17:00', tache: dayData.variable, absence: true}];
+    }
+
+    if (displayPlages.length > 0) {
+      // Texte des plages (heures pour travail, nom pour absence)
+      plagesText = displayPlages.map(function(p) {
+        if (p.absence) return p.tache || 'Absence';
+        return p.debut + ' - ' + p.fin;
+      }).join(' | ');
+      // Barres visuelles avec labels + tooltip au survol
+      plagesBars = '<div class="day-bars"><div class="day-bars-bg">';
+      for (var b = 0; b < displayPlages.length; b++) {
+        var pb = displayPlages[b];
+        var dParts = pb.debut.split(':'), fParts = pb.fin.split(':');
+        var dMin = parseInt(dParts[0]) * 60 + parseInt(dParts[1]);
+        var fMin = parseInt(fParts[0]) * 60 + parseInt(fParts[1]);
+        var left = ((dMin - 360) / (1200 - 360)) * 100;
+        var width = ((fMin - dMin) / (1200 - 360)) * 100;
+        if (left < 0) left = 0;
+        if (width + left > 100) width = 100 - left;
+        var barLabel = pb.tache || '';
+        var barLower = barLabel.toLowerCase();
+        var isCongeBar = pb.absence || barLower.indexOf('cong') > -1 || barLower.indexOf('rtt') > -1 || barLower.indexOf('maladie') > -1 || barLower.indexOf('absence') > -1;
+        var barClass = 'day-bar' + (isCongeBar ? ' conge-bar' : '');
+        var titleAttr = barLabel ? ' title="' + escHtml(barLabel) + '"' : '';
+        plagesBars += '<div class="' + barClass + '"' + titleAttr + ' style="left:' + left.toFixed(1) + '%;width:' + width.toFixed(1) + '%">';
+        if (barLabel) plagesBars += '<span class="day-bar-label">' + escHtml(barLabel) + '</span>';
+        plagesBars += '</div>';
+      }
+      plagesBars += '</div></div>';
+    } else if (dayData.variable) {
+      plagesText = dayData.variable;
+    } else if (!hasTravaille && !isWeekend) {
+      plagesText = 'Non travaille';
+    } else if (isWeekend) {
+      plagesText = 'Week-end';
+    }
+
+    // Hours
+    var hours = '';
+    var hoursClass = 'day-hours';
+    if (dayData.totalHeures) {
+      var h = Math.floor(dayData.totalHeures / 60);
+      var m = dayData.totalHeures % 60;
+      hours = h + 'h' + (m > 0 ? String(m).padStart(2, '0') : '');
+      if (dayData.totalHeures > 420) hoursClass += ' over-hours';
+      else if (dayData.totalHeures < 420 && dayData.travaille) hoursClass += ' under-hours';
+    }
+
+    // Badges
+    var badges = '';
+    if (isValideEntreprise) {
+      badges += '<span class="day-badge badge-entreprise">Valide</span>';
+    } else if (isValideSalarie) {
+      badges += '<span class="day-badge badge-salarie">Salarie</span>';
+    } else if (hasTravaille || hasPlages) {
+      badges += '<span class="day-badge badge-attente">En attente</span>';
+    }
+
+    // Mois abrégé pour la date
+    var moisNom = MOIS_NOMS_COURTS[CURRENT_MOIS - 1];
+
+    // Checkbox custom
+    var cbClass = 'day-cb-wrap';
+    if (isChecked) cbClass += ' checked';
+    if (!canCheck) cbClass += ' disabled';
+
+    html += '<div class="' + rowClass + '" data-date="' + dateStr + '">';
+    html += '<div class="' + cbClass + '" data-date="' + dateStr + '" onclick="toggleDayCb(this)">';
+    html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>';
+    html += '</div>';
+    html += '<div class="day-info">';
+    html += '<div class="day-date">' + jourNom + ' ' + d + ' ' + moisNom + '</div>';
+    if (plagesBars) html += plagesBars;
+    html += '<div class="day-plages">' + escHtml(plagesText) + '</div>';
+    html += '</div>';
+    html += '<div class="' + hoursClass + '">' + hours + '</div>';
+    html += '<div class="day-badges">' + badges + '</div>';
+    html += '</div>';
+  }
+
+  document.getElementById('daysList').innerHTML = html;
+  updateTotalSelected();
+}
+
+function toggleDayCb(el) {
+  if (el.classList.contains('disabled')) return;
+  el.classList.toggle('checked');
+  updateTotalSelected();
+  updateSelectAll();
+}
+
+function toggleSelectAll() {
+  var checked = document.getElementById('selectAllCb').checked;
+  var cbs = document.querySelectorAll('.day-cb-wrap:not(.disabled)');
+  for (var i = 0; i < cbs.length; i++) {
+    var dateStr = cbs[i].getAttribute('data-date');
+    var dayData = MONTH_DATA[dateStr] || {};
+    if (dayData.valideEntreprise) continue;
+    if (checked) {
+      cbs[i].classList.add('checked');
+    } else {
+      cbs[i].classList.remove('checked');
+    }
+  }
+  updateTotalSelected();
+}
+
+function updateSelectAll() {
+  var cbs = document.querySelectorAll('.day-cb-wrap:not(.disabled)');
+  var allChecked = true;
+  var count = 0;
+  for (var i = 0; i < cbs.length; i++) {
+    var dateStr = cbs[i].getAttribute('data-date');
+    var dayData = MONTH_DATA[dateStr] || {};
+    if (dayData.valideEntreprise) continue;
+    count++;
+    if (!cbs[i].classList.contains('checked')) allChecked = false;
+  }
+  document.getElementById('selectAllCb').checked = allChecked && count > 0;
+}
+
+function updateTotalSelected() {
+  var cbs = document.querySelectorAll('.day-cb-wrap.checked:not(.disabled)');
+  var count = 0;
+  for (var i = 0; i < cbs.length; i++) {
+    var dateStr = cbs[i].getAttribute('data-date');
+    var dayData = MONTH_DATA[dateStr] || {};
+    if (!dayData.valideEntreprise) count++;
+  }
+  document.getElementById('totalSelected').textContent = count + ' jour' + (count > 1 ? 's' : '');
+  document.getElementById('validateBtn').disabled = count === 0;
+}
+
+function getSelectedDates() {
+  var dates = [];
+  var cbs = document.querySelectorAll('.day-cb-wrap.checked:not(.disabled)');
+  for (var i = 0; i < cbs.length; i++) {
+    var dateStr = cbs[i].getAttribute('data-date');
+    var dayData = MONTH_DATA[dateStr] || {};
+    if (!dayData.valideEntreprise) {
+      dates.push(dateStr);
+    }
+  }
+  return dates;
+}
+
+// ─── VALIDATION ─────────────────────────────────────────────────────────────
+
+async function doValidate() {
+  var dates = getSelectedDates();
+  if (dates.length === 0) return;
+
+  // Show overlay
+  var overlay = document.getElementById('validOverlay');
+  overlay.classList.add('visible');
+  document.getElementById('overlayTitle').textContent = 'Validation en cours';
+  document.getElementById('overlayMsg').textContent = 'Connexion a eCollaboratrice...';
+  document.getElementById('overlayCancel').style.display = '';
+  setOverlaySteps(1);
+
+  document.getElementById('validateBtn').disabled = true;
+  _validAbort = new AbortController();
+
+  try {
+    // Step 1: connecting
+    setOverlaySteps(1);
+    document.getElementById('overlayMsg').textContent =
+      'Validation de ' + dates.length + ' jour' + (dates.length > 1 ? 's' : '') + '...';
+
+    // Step 2: sending
+    setTimeout(function() { setOverlaySteps(2); }, 3000);
+
+    var resp = await fetch(CFG.server + '/valider', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: CFG.email,
+        password: CFG.password,
+        url: CFG.url,
+        salarieId: CURRENT_COLLAB.id,
+        dates: dates,
+        mois: CURRENT_MOIS,
+        annee: CURRENT_ANNEE
+      }),
+      signal: _validAbort.signal
+    });
+    var data = await resp.json();
+
+    setOverlaySteps(3);
+
+    if (data.success) {
+      document.getElementById('overlayTitle').textContent = 'Validation reussie';
+      document.getElementById('overlayMsg').textContent = data.message || (dates.length + ' jour(s) valide(s)');
+      var s3ok = document.getElementById('step3').querySelector('.step-icon');
+      if (s3ok) s3ok.innerHTML = '&#10004;';
+
+      // Update local data
+      for (var i = 0; i < dates.length; i++) {
+        if (MONTH_DATA[dates[i]]) {
+          MONTH_DATA[dates[i]].valideEntreprise = true;
+        }
+      }
+
+      // Show result
+      showValidateResult('success', data.message || 'Validation enregistree avec succes');
+
+      setTimeout(function() {
+        overlay.classList.remove('visible');
+        renderDays();
+      }, 2000);
+    } else {
+      document.getElementById('overlayTitle').textContent = 'Erreur';
+      document.getElementById('overlayMsg').textContent = data.error || 'Erreur inconnue';
+      var s3err = document.getElementById('step3').querySelector('.step-icon');
+      if (s3err) s3err.innerHTML = '&#10060;';
+      showValidateResult('error', data.error || 'Erreur lors de la validation');
+
+      setTimeout(function() { overlay.classList.remove('visible'); }, 3000);
+    }
+  } catch(e) {
+    if (e.name === 'AbortError') {
+      document.getElementById('overlayMsg').textContent = 'Validation annulee';
+      setTimeout(function() { overlay.classList.remove('visible'); }, 1000);
+    } else {
+      document.getElementById('overlayTitle').textContent = 'Erreur';
+      document.getElementById('overlayMsg').textContent = 'Erreur : ' + e.message;
+      var s3err = document.getElementById('step3').querySelector('.step-icon');
+      if (s3err) s3err.innerHTML = '&#10060;';
+      showValidateResult('error', 'Erreur de connexion : ' + e.message);
+      setTimeout(function() { overlay.classList.remove('visible'); }, 3000);
+    }
+  }
+
+  document.getElementById('validateBtn').disabled = false;
+}
+
+function cancelValidation() {
+  if (_validAbort) _validAbort.abort();
+}
+
+var STEP_LABELS = ['Connexion a eCollaboratrice', 'Validation des jours', 'Sauvegarde'];
+function setOverlaySteps(active) {
+  for (var i = 1; i <= 3; i++) {
+    var el = document.getElementById('step' + i);
+    el.className = 'overlay-step';
+    var icon = el.querySelector('.step-icon');
+    if (i < active) {
+      el.className += ' done';
+      if (icon) icon.innerHTML = '&#10004;';
+    } else if (i === active) {
+      el.className += ' active';
+      if (icon) icon.innerHTML = '&#9203;';
+    } else {
+      if (icon) icon.innerHTML = '&#9675;';
+    }
+  }
+}
+
+function showValidateResult(type, msg) {
+  var el = document.getElementById('validateResult');
+  el.className = 'validate-result ' + type;
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+// ─── INIT ───────────────────────────────────────────────────────────────────
+
+function init() {
+  loadCfg();
+  loadSyncCache();
+
+  // Pre-fill login fields (only override HTML defaults if CFG has a value)
+  if (CFG.email)    document.getElementById('loginEmail').value = CFG.email;
+  if (CFG.password) document.getElementById('loginPassword').value = CFG.password;
+  if (CFG.url)      document.getElementById('loginUrl').value = CFG.url;
+  if (CFG.server)   document.getElementById('loginServer').value = CFG.server;
+
+  // Auto-login if credentials exist
+  if (CFG.email && CFG.password && CFG.url && CFG.server) {
+    loadTeamScreen();
+  } else {
+    showScreen('login');
+  }
+}
+
+// ─── SERVICE WORKER ─────────────────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(function(e) {
+    console.log('SW registration failed:', e);
+  });
+}
+
+init();
+
+</script>
+</body>
+</html>
