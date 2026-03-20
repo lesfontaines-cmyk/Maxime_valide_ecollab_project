@@ -733,6 +733,36 @@ def ping():
     return jsonify({"status": "ok", "message": "Serveur Validation Manager opérationnel"})
 
 
+@app.route("/pre-login", methods=["POST"])
+def pre_login():
+    """Ouvre une session Chrome partagée avec login, sans charger de collaborateur."""
+    data = request.get_json(force=True)
+    email    = (data.get("email")    or "").strip()
+    password = (data.get("password") or "").strip()
+    url      = (data.get("url")      or "").strip()
+
+    if not email or not password or not url:
+        return jsonify({"success": False, "error": "Email, mot de passe et URL requis"}), 400
+
+    # Si session partagée déjà active, pas besoin de re-login
+    existing = _get_shared_driver()
+    if existing:
+        return jsonify({"success": True, "message": "Session deja active"})
+
+    try:
+        driver = _make_driver()
+        today_d = datetime.date.today()
+        nav_url = _re.sub(r'mois=\d+', f'mois={today_d.month:02d}', url)
+        nav_url = _re.sub(r'annee=\d+', f'annee={today_d.year}', nav_url)
+        _navigate_ecol(driver, email, password, nav_url, today_d.month, today_d.year)
+        _set_shared_driver(driver)
+        print("  [pre-login] Session partagee creee avec succes", flush=True)
+        return jsonify({"success": True, "message": "Connexion reussie"})
+    except Exception as e:
+        msg = str(e).split('\n')[0]
+        return jsonify({"success": False, "error": f"Erreur connexion : {msg}"}), 500
+
+
 @app.route("/test-login", methods=["POST"])
 def test_login():
     """Teste les identifiants eCollab via Selenium."""
