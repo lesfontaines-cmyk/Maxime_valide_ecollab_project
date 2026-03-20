@@ -657,6 +657,34 @@
   .validate-result.success { display: block; background: #e8f5e8; border: 1px solid #a0c8a0; color: var(--green); }
   .validate-result.error { display: block; background: #f5e6e6; border: 1px solid #d4a0a0; color: var(--red); }
 
+  /* --- TOAST NOTIFICATIONS --- */
+  .toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: none;
+  }
+  .toast {
+    pointer-events: auto;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: 'Jost', sans-serif;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    opacity: 0;
+    transform: translateX(100%);
+    transition: all 0.3s ease;
+    max-width: 360px;
+  }
+  .toast.visible { opacity: 1; transform: translateX(0); }
+  .toast.info { background: #f0f4ff; border-left: 4px solid #4a7ab5; color: #2a4a7a; }
+  .toast.success { background: #e8f5e8; border-left: 4px solid #4a9a4a; color: #2a6a2a; }
+  .toast.error { background: #f5e6e6; border-left: 4px solid #c44a4a; color: #8a2a2a; }
+
   /* --- OVERLAY VALIDATION --- */
   .overlay {
     display: none;
@@ -749,6 +777,9 @@
 </style>
 </head>
 <body>
+
+<!-- ═══════════════ TOAST CONTAINER ═══════════════ -->
+<div class="toast-container" id="toastContainer"></div>
 
 <!-- ═══════════════ LOADING BANNER ═══════════════ -->
 <div class="loading-banner" id="loadingBanner">
@@ -952,6 +983,19 @@ function showLoading(msg) {
 function hideLoading() {
   document.getElementById('loadingBanner').classList.remove('visible');
   document.body.classList.remove('has-banner');
+}
+
+function showToast(type, msg) {
+  var container = document.getElementById('toastContainer');
+  var toast = document.createElement('div');
+  toast.className = 'toast ' + type;
+  toast.textContent = msg;
+  container.appendChild(toast);
+  setTimeout(function() { toast.classList.add('visible'); }, 50);
+  setTimeout(function() {
+    toast.classList.remove('visible');
+    setTimeout(function() { container.removeChild(toast); }, 300);
+  }, 5000);
 }
 
 function minToHHMM(m) {
@@ -1216,7 +1260,17 @@ async function syncAllCollabs() {
   var annee = new Date().getFullYear();
   var total = visibles.length;
 
-  // Appels individuels avec progression visible
+  // Etape 1 : Connexion a eCollaboratrice (pre-login)
+  showLoading('Connexion a eCollaboratrice...');
+  try {
+    await fetch(CFG.server + '/pre-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: CFG.email, password: CFG.password, url: CFG.url })
+    });
+  } catch(e) { console.error('Pre-login error', e); }
+
+  // Etape 2 : Synchronisation de chaque collaborateur
   for (var v = 0; v < visibles.length; v++) {
     var c = visibles[v];
     var name = formatCollabName(c);
@@ -1628,88 +1682,58 @@ async function doValidate() {
   var dates = getSelectedDates();
   if (dates.length === 0) return;
 
-  // Show overlay
-  var overlay = document.getElementById('validOverlay');
-  overlay.classList.add('visible');
-  document.getElementById('overlayTitle').textContent = 'Validation en cours';
-  document.getElementById('overlayMsg').textContent = 'Connexion a eCollaboratrice...';
-  document.getElementById('overlayCancel').style.display = '';
-  setOverlaySteps(1);
+  var collabName = formatCollabName(CURRENT_COLLAB);
+  var nbJours = dates.length;
 
-  document.getElementById('validateBtn').disabled = true;
-  _validAbort = new AbortController();
-
-  try {
-    // Step 1: connecting
-    setOverlaySteps(1);
-    document.getElementById('overlayMsg').textContent =
-      'Validation de ' + dates.length + ' jour' + (dates.length > 1 ? 's' : '') + '...';
-
-    // Step 2: sending
-    setTimeout(function() { setOverlaySteps(2); }, 3000);
-
-    var resp = await fetch(CFG.server + '/valider', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: CFG.email,
-        password: CFG.password,
-        url: CFG.url,
-        salarieId: CURRENT_COLLAB.id,
-        dates: dates,
-        mois: CURRENT_MOIS,
-        annee: CURRENT_ANNEE
-      }),
-      signal: _validAbort.signal
-    });
-    var data = await resp.json();
-
-    setOverlaySteps(3);
-
-    if (data.success) {
-      document.getElementById('overlayTitle').textContent = 'Validation reussie';
-      document.getElementById('overlayMsg').textContent = data.message || (dates.length + ' jour(s) valide(s)');
-      var s3ok = document.getElementById('step3').querySelector('.step-icon');
-      if (s3ok) s3ok.innerHTML = '&#10004;';
-
-      // Update local data
-      for (var i = 0; i < dates.length; i++) {
-        if (MONTH_DATA[dates[i]]) {
-          MONTH_DATA[dates[i]].valideEntreprise = true;
-        }
-      }
-
-      // Show result
-      showValidateResult('success', data.message || 'Validation enregistree avec succes');
-
-      setTimeout(function() {
-        overlay.classList.remove('visible');
-        renderDays();
-      }, 2000);
-    } else {
-      document.getElementById('overlayTitle').textContent = 'Erreur';
-      document.getElementById('overlayMsg').textContent = data.error || 'Erreur inconnue';
-      var s3err = document.getElementById('step3').querySelector('.step-icon');
-      if (s3err) s3err.innerHTML = '&#10060;';
-      showValidateResult('error', data.error || 'Erreur lors de la validation');
-
-      setTimeout(function() { overlay.classList.remove('visible'); }, 3000);
-    }
-  } catch(e) {
-    if (e.name === 'AbortError') {
-      document.getElementById('overlayMsg').textContent = 'Validation annulee';
-      setTimeout(function() { overlay.classList.remove('visible'); }, 1000);
-    } else {
-      document.getElementById('overlayTitle').textContent = 'Erreur';
-      document.getElementById('overlayMsg').textContent = 'Erreur : ' + e.message;
-      var s3err = document.getElementById('step3').querySelector('.step-icon');
-      if (s3err) s3err.innerHTML = '&#10060;';
-      showValidateResult('error', 'Erreur de connexion : ' + e.message);
-      setTimeout(function() { overlay.classList.remove('visible'); }, 3000);
+  // Optimistic update: mark days as validated locally
+  for (var i = 0; i < dates.length; i++) {
+    if (MONTH_DATA[dates[i]]) {
+      MONTH_DATA[dates[i]].valideEntreprise = true;
     }
   }
+  renderDays();
 
+  // Show toast and close immediately so manager can continue
+  showToast('info', 'Validation de ' + nbJours + ' jour(s) envoyee pour ' + collabName + '...');
   document.getElementById('validateBtn').disabled = false;
+
+  // Fire-and-forget: send request in background
+  fetch(CFG.server + '/valider', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: CFG.email,
+      password: CFG.password,
+      url: CFG.url,
+      salarieId: CURRENT_COLLAB.id,
+      dates: dates,
+      mois: CURRENT_MOIS,
+      annee: CURRENT_ANNEE
+    })
+  }).then(function(resp) { return resp.json(); })
+    .then(function(data) {
+      if (data.success) {
+        showToast('success', collabName + ' : ' + nbJours + ' jour(s) valide(s)');
+      } else {
+        // Revert optimistic update on error
+        for (var j = 0; j < dates.length; j++) {
+          if (MONTH_DATA[dates[j]]) {
+            MONTH_DATA[dates[j]].valideEntreprise = false;
+          }
+        }
+        renderDays();
+        showToast('error', collabName + ' : ' + (data.error || 'Erreur de validation'));
+      }
+    }).catch(function(e) {
+      // Revert optimistic update on error
+      for (var j = 0; j < dates.length; j++) {
+        if (MONTH_DATA[dates[j]]) {
+          MONTH_DATA[dates[j]].valideEntreprise = false;
+        }
+      }
+      renderDays();
+      showToast('error', collabName + ' : Erreur de connexion');
+    });
 }
 
 function cancelValidation() {
