@@ -660,8 +660,9 @@
   /* --- TOAST NOTIFICATIONS --- */
   .toast-container {
     position: fixed;
-    top: 20px;
-    right: 20px;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
     z-index: 10000;
     display: flex;
     flex-direction: column;
@@ -676,11 +677,11 @@
     font-family: 'Jost', sans-serif;
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     opacity: 0;
-    transform: translateX(100%);
+    transform: translateY(20px);
     transition: all 0.3s ease;
     max-width: 360px;
   }
-  .toast.visible { opacity: 1; transform: translateX(0); }
+  .toast.visible { opacity: 1; transform: translateY(0); }
   .toast.info { background: #f0f4ff; border-left: 4px solid #4a7ab5; color: #2a4a7a; }
   .toast.success { background: #e8f5e8; border-left: 4px solid #4a9a4a; color: #2a6a2a; }
   .toast.error { background: #f5e6e6; border-left: 4px solid #c44a4a; color: #8a2a2a; }
@@ -918,7 +919,7 @@
   <div class="overlay-box">
     <div class="overlay-title" id="overlayTitle">Validation en cours</div>
     <div class="overlay-steps" id="overlaySteps">
-      <span class="overlay-step active" id="step1"><span class="step-icon">&#9203;</span> Connexion a eCollaboratrice</span>
+      <span class="overlay-step active" id="step1"><span class="step-icon">&#9203;</span> Connexion à eCollaboratrice</span>
       <span class="overlay-step" id="step2"><span class="step-icon">&#9203;</span> Validation des jours</span>
       <span class="overlay-step" id="step3"><span class="step-icon">&#9203;</span> Sauvegarde</span>
     </div>
@@ -987,15 +988,19 @@ function hideLoading() {
 
 function showToast(type, msg) {
   var container = document.getElementById('toastContainer');
+  // Remplacer le toast précédent s'il existe
+  container.innerHTML = '';
   var toast = document.createElement('div');
   toast.className = 'toast ' + type;
   toast.textContent = msg;
+  toast.style.pointerEvents = 'auto';
+  toast.style.cursor = 'pointer';
+  toast.onclick = function() {
+    toast.classList.remove('visible');
+    setTimeout(function() { container.innerHTML = ''; }, 300);
+  };
   container.appendChild(toast);
   setTimeout(function() { toast.classList.add('visible'); }, 50);
-  setTimeout(function() {
-    toast.classList.remove('visible');
-    setTimeout(function() { container.removeChild(toast); }, 300);
-  }, 5000);
 }
 
 function minToHHMM(m) {
@@ -1260,8 +1265,8 @@ async function syncAllCollabs() {
   var annee = new Date().getFullYear();
   var total = visibles.length;
 
-  // Etape 1 : Connexion a eCollaboratrice (pre-login)
-  showLoading('Connexion a eCollaboratrice...');
+  // Etape 1 : Connexion à eCollaboratrice (pre-login)
+  showLoading('Connexion à eCollaboratrice...');
   try {
     await fetch(CFG.server + '/pre-login', {
       method: 'POST',
@@ -1740,7 +1745,7 @@ function cancelValidation() {
   if (_validAbort) _validAbort.abort();
 }
 
-var STEP_LABELS = ['Connexion a eCollaboratrice', 'Validation des jours', 'Sauvegarde'];
+var STEP_LABELS = ['Connexion à eCollaboratrice', 'Validation des jours', 'Sauvegarde'];
 function setOverlaySteps(active) {
   for (var i = 1; i <= 3; i++) {
     var el = document.getElementById('step' + i);
