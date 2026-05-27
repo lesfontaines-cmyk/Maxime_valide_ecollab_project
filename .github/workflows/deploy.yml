@@ -8,6 +8,16 @@ jobs:
   deploy:
     runs-on: self-hosted
     steps:
+      - name: Diagnostics serveur
+        run: |
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} 'set +e
+            echo "=== UID (0 = root) ==="; id -u
+            echo "=== passwordless sudo ? ==="; sudo -n true 2>/dev/null && echo "NOPASSWD_OK" || echo "NEEDS_PASSWORD"
+            echo "=== service valide-serveur (is-active) ==="; systemctl is-active valide-serveur 2>&1
+            echo "=== unit file (ExecStart...) ==="; systemctl cat valide-serveur 2>&1 | head -25
+            echo "=== docker ps ==="; docker ps 2>&1 | head -8 || echo "no docker access"
+          '
+
       - name: Deploy via SSH
         run: |
           ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "cd ${{ secrets.PROJECT_PATH }} && git fetch origin main && git reset --hard origin/main && sudo systemctl restart valide-serveur || true"
