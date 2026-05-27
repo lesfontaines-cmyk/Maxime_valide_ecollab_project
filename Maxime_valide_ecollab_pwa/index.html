@@ -394,6 +394,19 @@
     color: var(--light);
     font-size: 13px;
   }
+  .app-version-footer {
+    text-align: center;
+    margin: 32px 24px 24px;
+    color: var(--light);
+    font-size: 12px;
+    letter-spacing: 1px;
+    opacity: 0.6;
+  }
+  .app-version-footer a {
+    color: var(--gold, #c5a572);
+    text-decoration: underline;
+    cursor: pointer;
+  }
 
   /* --- MONTH NAV --- */
   .month-nav {
@@ -862,6 +875,11 @@
 
   <div class="settings-info">Desactivez les collaborateurs que vous ne souhaitez pas voir dans la liste.</div>
   <div class="settings-list" id="settingsList"></div>
+
+  <div class="app-version-footer">
+    <span id="appVersionLabel">v--</span> &mdash;
+    <a href="#" id="forceUpdateLink" onclick="forceAppUpdate();return false;">Forcer la mise a jour</a>
+  </div>
 </div>
 
 <!-- ═══════════════ MONTH VALIDATION SCREEN ═══════════════ -->
@@ -943,6 +961,7 @@ var CURRENT_MOIS = new Date().getMonth() + 1;
 var CURRENT_ANNEE = new Date().getFullYear();
 var MONTH_DATA = {};  // {dateISO: {plages, travaille, valideSalarie, valideEntreprise, totalHeures}}
 var _validAbort = null;
+var _activeValidations = 0; // nombre de validations en vol (1 en cours + reste en file)
 
 var MOIS_NOMS = ['', 'Janvier', 'Fevrier', 'Mars', 'Avril', 'Mai', 'Juin',
                  'Juillet', 'Aout', 'Septembre', 'Octobre', 'Novembre', 'Decembre'];
@@ -988,19 +1007,27 @@ function hideLoading() {
 
 function showToast(type, msg) {
   var container = document.getElementById('toastContainer');
-  // Remplacer le toast précédent s'il existe
-  container.innerHTML = '';
   var toast = document.createElement('div');
   toast.className = 'toast ' + type;
   toast.textContent = msg;
   toast.style.pointerEvents = 'auto';
   toast.style.cursor = 'pointer';
-  toast.onclick = function() {
+
+  function dismiss() {
     toast.classList.remove('visible');
-    setTimeout(function() { container.innerHTML = ''; }, 300);
-  };
+    setTimeout(function() {
+      if (toast.parentNode) toast.parentNode.removeChild(toast);
+    }, 300);
+  }
+  toast.onclick = dismiss;
+
   container.appendChild(toast);
   setTimeout(function() { toast.classList.add('visible'); }, 50);
+
+  // Auto-dismiss : info après 4s, success après 5s, error reste jusqu'au clic
+  if (type !== 'error') {
+    setTimeout(dismiss, type === 'success' ? 5000 : 4000);
+  }
 }
 
 function minToHHMM(m) {
@@ -1515,7 +1542,7 @@ function renderDays() {
     var allTexts = (dayData.variable || '') + '|' + (dayData.variables || '');
     if (dayData.taches) allTexts += '|' + dayData.taches.join('|');
     var allLower = allTexts.toLowerCase();
-    var isConge = allLower.indexOf('cong') > -1 || allLower.indexOf('rtt') > -1 || allLower.indexOf('maladie') > -1 || allLower.indexOf('absence') > -1;
+    var isConge = allLower.indexOf('cong') > -1 || allLower.indexOf('rtt') > -1 || allLower.indexOf('maladie') > -1 || allLower.indexOf('absence') > -1 || allLower.indexOf('férié') > -1 || allLower.indexOf('chôm') > -1;
     if (isWeekend && !hasTravaille) rowClass += ' weekend';
     else if (isConge) rowClass += ' conge';
     else if (!hasTravaille && !hasPlages) rowClass += ' no-work';
@@ -1556,7 +1583,7 @@ function renderDays() {
         if (width + left > 100) width = 100 - left;
         var barLabel = pb.tache || '';
         var barLower = barLabel.toLowerCase();
-        var isCongeBar = pb.absence || barLower.indexOf('cong') > -1 || barLower.indexOf('rtt') > -1 || barLower.indexOf('maladie') > -1 || barLower.indexOf('absence') > -1;
+        var isCongeBar = pb.absence || barLower.indexOf('cong') > -1 || barLower.indexOf('rtt') > -1 || barLower.indexOf('maladie') > -1 || barLower.indexOf('absence') > -1 || barLower.indexOf('férié') > -1 || barLower.indexOf('chôm') > -1;
         var barClass = 'day-bar' + (isCongeBar ? ' conge-bar' : '');
         var titleAttr = barLabel ? ' title="' + escHtml(barLabel) + '"' : '';
         plagesBars += '<div class="' + barClass + '"' + titleAttr + ' style="left:' + left.toFixed(1) + '%;width:' + width.toFixed(1) + '%">';
@@ -1687,19 +1714,42 @@ async function doValidate() {
   var dates = getSelectedDates();
   if (dates.length === 0) return;
 
-  var collabName = formatCollabName(CURRENT_COLLAB);
+  // Capturer le collab cible MAINTENANT (le manager peut naviguer ailleurs avant la réponse)
+  var targetCollab = CURRENT_COLLAB;
+  var collabId = targetCollab.id;
+  var collabName = formatCollabName(targetCollab);
   var nbJours = dates.length;
+  var mois = CURRENT_MOIS;
+  var annee = CURRENT_ANNEE;
 
-  // Optimistic update: mark days as validated locally
-  for (var i = 0; i < dates.length; i++) {
-    if (MONTH_DATA[dates[i]]) {
-      MONTH_DATA[dates[i]].valideEntreprise = true;
+  // Optimistic update: marquer les jours validés dans MONTH_DATA + SYNC_CACHE
+  function applyValidation(value) {
+    // 1) Mémoire active si on est toujours sur ce collab
+    if (CURRENT_COLLAB && CURRENT_COLLAB.id === collabId) {
+      for (var i = 0; i < dates.length; i++) {
+        if (MONTH_DATA[dates[i]]) MONTH_DATA[dates[i]].valideEntreprise = value;
+      }
+      renderDays();
+    }
+    // 2) Cache du collab (peut être différent de MONTH_DATA si l'utilisateur est parti)
+    var cached = SYNC_CACHE[collabId];
+    if (cached && cached.mois === mois && cached.annee === annee && cached.days) {
+      for (var j = 0; j < dates.length; j++) {
+        if (cached.days[dates[j]]) cached.days[dates[j]].valideEntreprise = value;
+      }
+      try { localStorage.setItem('vm_sync_cache', JSON.stringify(SYNC_CACHE)); } catch(e) {}
     }
   }
-  renderDays();
 
-  // Show toast and close immediately so manager can continue
-  showToast('info', 'Validation de ' + nbJours + ' jour(s) envoyee pour ' + collabName + '...');
+  applyValidation(true);
+
+  // Toast : "en cours" si rien d'autre ne tourne, sinon "en file d'attente"
+  // (le serveur sérialise les validations pour eviter les conflits de session eCollab)
+  var queueMsg = (_activeValidations === 0)
+    ? collabName + ' : validation de ' + nbJours + ' jour(s) en cours...'
+    : collabName + ' : ' + nbJours + ' jour(s) en file d\'attente...';
+  showToast('info', queueMsg);
+  _activeValidations++;
   document.getElementById('validateBtn').disabled = false;
 
   // Fire-and-forget: send request in background
@@ -1710,34 +1760,25 @@ async function doValidate() {
       email: CFG.email,
       password: CFG.password,
       url: CFG.url,
-      salarieId: CURRENT_COLLAB.id,
+      salarieId: collabId,
       dates: dates,
-      mois: CURRENT_MOIS,
-      annee: CURRENT_ANNEE
+      mois: mois,
+      annee: annee
     })
   }).then(function(resp) { return resp.json(); })
     .then(function(data) {
       if (data.success) {
         showToast('success', collabName + ' : ' + nbJours + ' jour(s) valide(s)');
       } else {
-        // Revert optimistic update on error
-        for (var j = 0; j < dates.length; j++) {
-          if (MONTH_DATA[dates[j]]) {
-            MONTH_DATA[dates[j]].valideEntreprise = false;
-          }
-        }
-        renderDays();
+        applyValidation(false);
         showToast('error', collabName + ' : ' + (data.error || 'Erreur de validation'));
       }
     }).catch(function(e) {
-      // Revert optimistic update on error
-      for (var j = 0; j < dates.length; j++) {
-        if (MONTH_DATA[dates[j]]) {
-          MONTH_DATA[dates[j]].valideEntreprise = false;
-        }
-      }
-      renderDays();
+      applyValidation(false);
       showToast('error', collabName + ' : Erreur de connexion');
+    }).finally(function() {
+      _activeValidations--;
+      if (_activeValidations < 0) _activeValidations = 0;
     });
 }
 
@@ -1790,9 +1831,75 @@ function init() {
   }
 }
 
-// ─── SERVICE WORKER ─────────────────────────────────────────────────────────
+// ─── FORCE UPDATE (lien Parametres) ─────────────────────────────────────────
+function forceAppUpdate() {
+  var link = document.getElementById('forceUpdateLink');
+  if (link) link.textContent = 'Mise a jour en cours...';
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistration().then(function(reg) {
+      if (reg) {
+        reg.update().then(function() {
+          if (link) link.textContent = 'Mise a jour terminee !';
+          setTimeout(function() {
+            if (link) link.textContent = 'Forcer la mise a jour';
+          }, 3000);
+        }).catch(function() {
+          if (link) link.textContent = 'Forcer la mise a jour';
+        });
+      } else {
+        if (link) link.textContent = 'Forcer la mise a jour';
+      }
+    });
+  } else {
+    if (link) link.textContent = 'Forcer la mise a jour';
+  }
+}
+
+// ─── SERVICE WORKER : enregistrement + mise a jour auto ─────────────────────
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js').catch(function(e) {
+  // Garde anti-boucle de rechargement
+  var _swReloadKey = 'sw_reload_ts';
+  var _swReloadGuardMs = 3000;
+
+  // Quand un nouveau SW prend le controle → recharger la page
+  var _swRefreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', function() {
+    if (_swRefreshing) return;
+    var lastReload = parseInt(sessionStorage.getItem(_swReloadKey) || '0', 10);
+    if (Date.now() - lastReload < _swReloadGuardMs) return;
+    _swRefreshing = true;
+    sessionStorage.setItem(_swReloadKey, String(Date.now()));
+    window.location.reload();
+  });
+
+  navigator.serviceWorker.register('./sw.js').then(function(reg) {
+    // Verifier les mises a jour toutes les 60 minutes
+    setInterval(function() {
+      reg.update().catch(function() {});
+    }, 60 * 60 * 1000);
+
+    // Verifier immediatement quand on revient en ligne
+    window.addEventListener('online', function() {
+      reg.update().catch(function() {});
+    });
+
+    // Demander la version au SW et l'afficher
+    function querySwVersion(sw) {
+      if (!sw) return;
+      var mc = new MessageChannel();
+      mc.port1.onmessage = function(evt) {
+        if (evt.data && evt.data.version) {
+          var el = document.getElementById('appVersionLabel');
+          if (el) el.textContent = 'v' + evt.data.version;
+        }
+      };
+      sw.postMessage({ type: 'GET_VERSION' }, [mc.port2]);
+    }
+    navigator.serviceWorker.ready.then(function(readyReg) {
+      querySwVersion(readyReg.active);
+    });
+  }).catch(function(e) {
     console.log('SW registration failed:', e);
   });
 }
