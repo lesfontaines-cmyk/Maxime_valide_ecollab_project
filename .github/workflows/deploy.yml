@@ -11,11 +11,15 @@ jobs:
       - name: Diagnostics serveur
         run: |
           ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} 'set +e
-            echo "=== UID (0 = root) ==="; id -u
-            echo "=== passwordless sudo ? ==="; sudo -n true 2>/dev/null && echo "NOPASSWD_OK" || echo "NEEDS_PASSWORD"
-            echo "=== service valide-serveur (is-active) ==="; systemctl is-active valide-serveur 2>&1
-            echo "=== unit file (ExecStart...) ==="; systemctl cat valide-serveur 2>&1 | head -25
-            echo "=== docker ps ==="; docker ps 2>&1 | head -8 || echo "no docker access"
+            C=$(docker ps --filter ancestor=valide --format "{{.Names}}" | head -1)
+            echo "=== container valide ==="; echo "$C"
+            echo "=== image ==="; docker inspect -f "{{.Config.Image}}" "$C" 2>&1
+            echo "=== port bindings ==="; docker inspect -f "{{json .HostConfig.PortBindings}}" "$C" 2>&1
+            echo "=== restart policy ==="; docker inspect -f "{{json .HostConfig.RestartPolicy}}" "$C" 2>&1
+            echo "=== env ==="; docker inspect -f "{{json .Config.Env}}" "$C" 2>&1
+            echo "=== mounts ==="; docker inspect -f "{{json .Mounts}}" "$C" 2>&1
+            echo "=== cmd/entrypoint ==="; docker inspect -f "Entrypoint={{json .Config.Entrypoint}} Cmd={{json .Config.Cmd}}" "$C" 2>&1
+            echo "=== how images are built (image labels) ==="; docker image inspect valide -f "{{json .Config.Labels}}" 2>&1
           '
 
       - name: Deploy via SSH
