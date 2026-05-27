@@ -8,20 +8,18 @@ jobs:
   deploy:
     runs-on: self-hosted
     steps:
-      - name: Diagnostics serveur
-        run: |
-          ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} 'set +e
-            C=$(docker ps --filter ancestor=valide --format "{{.Names}}" | head -1)
-            echo "=== container valide ==="; echo "$C"
-            echo "=== image ==="; docker inspect -f "{{.Config.Image}}" "$C" 2>&1
-            echo "=== port bindings ==="; docker inspect -f "{{json .HostConfig.PortBindings}}" "$C" 2>&1
-            echo "=== restart policy ==="; docker inspect -f "{{json .HostConfig.RestartPolicy}}" "$C" 2>&1
-            echo "=== env ==="; docker inspect -f "{{json .Config.Env}}" "$C" 2>&1
-            echo "=== mounts ==="; docker inspect -f "{{json .Mounts}}" "$C" 2>&1
-            echo "=== cmd/entrypoint ==="; docker inspect -f "Entrypoint={{json .Config.Entrypoint}} Cmd={{json .Config.Cmd}}" "$C" 2>&1
-            echo "=== how images are built (image labels) ==="; docker image inspect valide -f "{{json .Config.Labels}}" 2>&1
-          '
-
       - name: Deploy via SSH
         run: |
-          ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "cd ${{ secrets.PROJECT_PATH }} && git fetch origin main && git reset --hard origin/main && sudo systemctl restart valide-serveur || true"
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} 'set -e
+            cd ${{ secrets.PROJECT_PATH }}
+            git fetch origin main
+            git reset --hard origin/main
+            cd Maxime_valide_ecollab_serveur
+            OLD=$(docker ps -aq --filter ancestor=valide)
+            docker build -t valide .
+            docker rm -f $OLD valide-serveur 2>/dev/null || true
+            docker run -d --name valide-serveur --restart unless-stopped -e PORT=6541 -p 6541:6541 valide
+            docker image prune -f || true
+            echo "=== deployed ==="
+            docker ps --filter name=valide-serveur --format "{{.Names}} {{.Status}} {{.Ports}}"
+          '
