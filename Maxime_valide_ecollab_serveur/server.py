@@ -10,8 +10,12 @@ import time
 import datetime
 import os
 import re as _re
+import threading
 from flask import Flask, request, jsonify, Response, stream_with_context
 from flask_cors import CORS
+
+# Lock global : sérialise les validations Selenium pour éviter les conflits de session eCollab
+_validation_lock = threading.Lock()
 
 app = Flask(__name__)
 CORS(app)
@@ -333,25 +337,30 @@ _SCRAPE_JS = """
         var valideSalarie = tippy.indexOf('salari') > -1 || valideEntreprise;
 
         var rowText = rows[r].textContent;
+        var rowLower = rowText.toLowerCase();
         var variable = '';
         if (rowText.indexOf('Cong') > -1) variable = 'Conge paye';
         if (rowText.indexOf('RTT') > -1) variable = 'RTT';
         if (rowText.indexOf('Maladie') > -1) variable = 'Maladie';
         if (rowText.indexOf('Absence') > -1) variable = 'Absence';
+        if (rowLower.indexOf('férié') > -1 || rowLower.indexOf('chôm') > -1) variable = 'Férié chômé';
         for (var c = 0; c < cells.length; c++) {
             var ct = cells[c].textContent.trim();
+            var ctLower = ct.toLowerCase();
             if (ct.length < 80) {
                 if (ct.indexOf('Cong') > -1) { variable = ct; break; }
                 if (ct.indexOf('RTT') > -1) { variable = ct; break; }
                 if (ct.indexOf('Absence') > -1) { variable = ct; break; }
                 if (ct.indexOf('Maladie') > -1) { variable = ct; break; }
+                if (ctLower.indexOf('férié') > -1 || ctLower.indexOf('chôm') > -1) { variable = ct; break; }
             }
         }
 
-        // Détection congé/absence uniquement via texte DOM (le Vue model n'a pas IdVariable)
+        // Détection congé/absence/férié uniquement via texte DOM (le Vue model n'a pas IdVariable)
         var varLower = (variable || '').toLowerCase();
         var isAbsenceDay = varLower.indexOf('cong') > -1 || varLower.indexOf('rtt') > -1 ||
-                           varLower.indexOf('maladie') > -1 || varLower.indexOf('absence') > -1;
+                           varLower.indexOf('maladie') > -1 || varLower.indexOf('absence') > -1 ||
+                           varLower.indexOf('férié') > -1 || varLower.indexOf('chôm') > -1;
 
         if (isAbsenceDay && plages.length > 0) {
             // Chercher les plages qui ont un texte d'absence dans le tippy
@@ -360,7 +369,8 @@ _SCRAPE_JS = """
             for (var pa = 0; pa < plages.length; pa++) {
                 var ptxt = (plages[pa].tache || '').toLowerCase();
                 if (ptxt.indexOf('cong') > -1 || ptxt.indexOf('absence') > -1 ||
-                    ptxt.indexOf('maladie') > -1 || ptxt.indexOf('rtt') > -1) {
+                    ptxt.indexOf('maladie') > -1 || ptxt.indexOf('rtt') > -1 ||
+                    ptxt.indexOf('férié') > -1 || ptxt.indexOf('chôm') > -1) {
                     absenceSlots[plages[pa].debut + '-' + plages[pa].fin] = true;
                     hasAnyAbsencePlage = true;
                 }
@@ -375,7 +385,8 @@ _SCRAPE_JS = """
                     var slotKey = plages[pw].debut + '-' + plages[pw].fin;
                     var ptxt2 = (plages[pw].tache || '').toLowerCase();
                     var isAbsPlage = ptxt2.indexOf('cong') > -1 || ptxt2.indexOf('absence') > -1 ||
-                                     ptxt2.indexOf('maladie') > -1 || ptxt2.indexOf('rtt') > -1;
+                                     ptxt2.indexOf('maladie') > -1 || ptxt2.indexOf('rtt') > -1 ||
+                                     ptxt2.indexOf('férié') > -1 || ptxt2.indexOf('chôm') > -1;
                     if (isAbsPlage) {
                         // Garder la plage absence avec marqueur
                         plages[pw].absence = true;
@@ -596,7 +607,22 @@ def valider_jours_selenium(email, password, url, salarie_id, dates, mois, annee)
     Valide les jours en ouvrant la modale de chaque jour,
     cliquant le bouton vert 'Valider et bloquer', fermant la modale,
     puis cliquant Sauvegarder.
+
+    Sérialisé via _validation_lock : si une autre validation est en cours,
+    celle-ci attend que la précédente soit terminée (évite les conflits de
+    session côté eCollab quand plusieurs sessions se connectent en parallèle
+    avec les mêmes identifiants manager).
     """
+    print(f"  [valider] En attente du lock pour idContrat={salarie_id}...", flush=True)
+    t_wait = time.time()
+    with _validation_lock:
+        wait_s = time.time() - t_wait
+        if wait_s > 0.5:
+            print(f"  [valider] Lock acquis apres {wait_s:.1f}s d'attente", flush=True)
+        return _valider_jours_selenium_locked(email, password, url, salarie_id, dates, mois, annee)
+
+
+def _valider_jours_selenium_locked(email, password, url, salarie_id, dates, mois, annee):
     driver = None
     try:
         close_shared_driver()

@@ -1,0 +1,13 @@
+name: Deploy to server
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Deploy via SSH
+        run: |
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "cd ${{ secrets.PROJECT_PATH }} && git pull origin main && cd Maxime_valide_ecollab_serveur && pip install -r requirements.txt && sudo systemctl restart valide-serveur || true"

@@ -2,9 +2,10 @@
 // Validation CM — Service Worker
 // =============================================
 // Developpeur : bumper APP_VERSION a chaque deploiement.
+// Ce seul changement declenche le cycle complet de mise a jour.
 // =============================================
 
-var APP_VERSION = '1.3.0';
+var APP_VERSION = '1.4.0';
 var CACHE_NAME  = 'validation-cm-v' + APP_VERSION;
 
 var PRECACHE_FILES = [
@@ -17,6 +18,7 @@ var PRECACHE_FILES = [
 ];
 
 // ----- INSTALL -----
+// Pre-cache les fichiers essentiels, puis activation immediate (skipWaiting).
 self.addEventListener('install', function(event) {
   event.waitUntil(
     caches.open(CACHE_NAME).then(function(cache) {
@@ -27,6 +29,7 @@ self.addEventListener('install', function(event) {
 });
 
 // ----- ACTIVATE -----
+// Supprime TOUS les anciens caches, puis prend le controle des clients.
 self.addEventListener('activate', function(event) {
   event.waitUntil(
     caches.keys().then(function(cacheNames) {
@@ -45,24 +48,34 @@ self.addEventListener('activate', function(event) {
 self.addEventListener('fetch', function(event) {
   var request = event.request;
 
+  // Ignorer les requetes non-GET
   if (request.method !== 'GET') return;
 
+  // Navigations HTML → stale-while-revalidate
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request).then(function(networkResponse) {
-        if (networkResponse && networkResponse.status === 200) {
-          caches.open(CACHE_NAME).then(function(cache) {
-            cache.put(request, networkResponse.clone());
+      caches.open(CACHE_NAME).then(function(cache) {
+        return cache.match(request).then(function(cachedResponse) {
+          // Toujours fetch en arriere-plan pour mettre a jour le cache
+          var fetchPromise = fetch(request).then(function(networkResponse) {
+            if (networkResponse && networkResponse.status === 200) {
+              cache.put(request, networkResponse.clone());
+            }
+            return networkResponse;
+          }).catch(function() {
+            return null;
           });
-        }
-        return networkResponse;
-      }).catch(function() {
-        return caches.match(request);
+
+          // Retourne le cache immediatement si disponible,
+          // sinon attend le reseau
+          return cachedResponse || fetchPromise;
+        });
       })
     );
     return;
   }
 
+  // Autres requetes → cache-first, fallback reseau
   event.respondWith(
     caches.match(request).then(function(cachedResponse) {
       if (cachedResponse) return cachedResponse;
@@ -85,6 +98,7 @@ self.addEventListener('fetch', function(event) {
 });
 
 // ----- MESSAGE -----
+// Permet a la page de demander la version du SW
 self.addEventListener('message', function(event) {
   if (event.data && event.data.type === 'GET_VERSION') {
     event.ports[0].postMessage({ version: APP_VERSION });
