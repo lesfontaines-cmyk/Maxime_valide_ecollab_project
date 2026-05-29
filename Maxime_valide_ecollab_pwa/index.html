@@ -1005,13 +1005,22 @@ function hideLoading() {
   document.body.classList.remove('has-banner');
 }
 
-function showToast(type, msg) {
+function showToast(type, msg, opts) {
+  opts = opts || {};
   var container = document.getElementById('toastContainer');
+
+  // Si un toast avec ce même id existe déjà, on le remplace (mise à jour de statut)
+  if (opts.id) {
+    var existing = container.querySelector('[data-toast-id="' + opts.id + '"]');
+    if (existing) existing.parentNode.removeChild(existing);
+  }
+
   var toast = document.createElement('div');
   toast.className = 'toast ' + type;
   toast.textContent = msg;
   toast.style.pointerEvents = 'auto';
   toast.style.cursor = 'pointer';
+  if (opts.id) toast.setAttribute('data-toast-id', opts.id);
 
   function dismiss() {
     toast.classList.remove('visible');
@@ -1024,9 +1033,10 @@ function showToast(type, msg) {
   container.appendChild(toast);
   setTimeout(function() { toast.classList.add('visible'); }, 50);
 
-  // Auto-dismiss : info après 4s, success après 5s, error reste jusqu'au clic
-  if (type !== 'error') {
-    setTimeout(dismiss, type === 'success' ? 5000 : 4000);
+  // Auto-dismiss : success après 5s. info et error restent (info = "en cours" persistant,
+  // sera remplacé par le toast de résultat ; error reste jusqu'au clic).
+  if (type === 'success') {
+    setTimeout(dismiss, 5000);
   }
 }
 
@@ -1743,12 +1753,13 @@ async function doValidate() {
 
   applyValidation(true);
 
-  // Toast : "en cours" si rien d'autre ne tourne, sinon "en file d'attente"
+  // Toast persistant identifié par collab+timestamp → sera remplacé par le résultat
   // (le serveur sérialise les validations pour eviter les conflits de session eCollab)
+  var toastId = 'valid_' + collabId + '_' + Date.now();
   var queueMsg = (_activeValidations === 0)
     ? collabName + ' : validation de ' + nbJours + ' jour(s) en cours...'
     : collabName + ' : ' + nbJours + ' jour(s) en file d\'attente...';
-  showToast('info', queueMsg);
+  showToast('info', queueMsg, {id: toastId});
   _activeValidations++;
   document.getElementById('validateBtn').disabled = false;
 
@@ -1768,14 +1779,14 @@ async function doValidate() {
   }).then(function(resp) { return resp.json(); })
     .then(function(data) {
       if (data.success) {
-        showToast('success', collabName + ' : ' + nbJours + ' jour(s) valide(s)');
+        showToast('success', collabName + ' : ' + nbJours + ' jour(s) valide(s)', {id: toastId});
       } else {
         applyValidation(false);
-        showToast('error', collabName + ' : ' + (data.error || 'Erreur de validation'));
+        showToast('error', collabName + ' : ' + (data.error || 'Erreur de validation'), {id: toastId});
       }
     }).catch(function(e) {
       applyValidation(false);
-      showToast('error', collabName + ' : Erreur de connexion');
+      showToast('error', collabName + ' : Erreur de connexion', {id: toastId});
     }).finally(function() {
       _activeValidations--;
       if (_activeValidations < 0) _activeValidations = 0;
