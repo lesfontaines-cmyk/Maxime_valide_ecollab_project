@@ -14,12 +14,12 @@ jobs:
             cd ${{ secrets.PROJECT_PATH }}
             git fetch origin main
             git reset --hard origin/main
-            cd Maxime_valide_ecollab_serveur
-            OLD=$(docker ps -aq --filter ancestor=valide)
-            docker build -t valide .
-            docker rm -f $OLD valide-serveur 2>/dev/null || true
-            docker run -d --name valide-serveur --restart unless-stopped -e PORT=6541 -p 6541:6541 valide
-            docker image prune -f || true
+            CONTAINER=$(docker ps -qf ancestor=valide)
+            if [ -z "$CONTAINER" ]; then echo "Aucun conteneur valide en cours dexecution"; exit 1; fi
+            docker cp Maxime_valide_ecollab_serveur/server.py $CONTAINER:/app/server.py
+            docker cp Maxime_valide_ecollab_serveur/requirements.txt $CONTAINER:/tmp/requirements.txt
+            docker exec $CONTAINER pip install --break-system-packages -r /tmp/requirements.txt 2>&1 || echo WARN_PIP
+            docker restart $CONTAINER
             echo "=== deployed ==="
             docker ps --filter name=valide-serveur --format "{{.Names}} {{.Status}} {{.Ports}}"
           '
