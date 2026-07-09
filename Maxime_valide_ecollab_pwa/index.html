@@ -827,7 +827,7 @@
     </div>
     <div class="field">
       <label>URL du serveur</label>
-      <input type="url" id="loginServer" placeholder="http://192.168.1.112:5000" value="https://maximevalideecollabproject-production.up.railway.app" />
+      <input type="url" id="loginServer" placeholder="https://serveur-validation.charlesmurgat.com" value="https://serveur-validation.charlesmurgat.com" />
       <div class="hint">Adresse du serveur de validation.</div>
     </div>
     <button class="btn-login" id="loginBtn" onclick="doLogin()">Se connecter</button>
@@ -1060,6 +1060,12 @@ function loadCfg() {
     CFG.password = localStorage.getItem('vm_pwd') || '';
     CFG.url      = localStorage.getItem('vm_url') || '';
     CFG.server   = localStorage.getItem('vm_server') || '';
+    // Migration : l'ancien backend Railway n'existe plus (404). On bascule
+    // automatiquement les valeurs mémorisées vers le serveur de production actuel.
+    if (CFG.server.indexOf('railway.app') !== -1) {
+      CFG.server = 'https://serveur-validation.charlesmurgat.com';
+      try { localStorage.setItem('vm_server', CFG.server); } catch(e) {}
+    }
   } catch(e) {}
 }
 
