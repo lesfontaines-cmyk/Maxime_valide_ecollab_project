@@ -859,6 +859,12 @@
     <div class="section-hint" id="teamCount"></div>
   </div>
 
+  <div style="text-align:center;margin:2px 0 10px;">
+    <button onclick="openTeamFull()" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;font-size:13px;border:1px solid #c9b487;background:#faf6ee;color:#5a4a2a;border-radius:20px;cursor:pointer;">
+      🖥️ Vue complète (tous les collaborateurs)
+    </button>
+  </div>
+
   <div class="collab-list" id="collabList"></div>
 </div>
 
@@ -937,6 +943,43 @@
     <button class="validate-btn" id="validateBtn" onclick="doValidate()">Valider la selection</button>
   </div>
   <div class="validate-result" id="validateResult"></div>
+</div>
+
+<!-- ═══════════════ TEAM FULL (PC) SCREEN ═══════════════ -->
+<style>
+#teamFullScreen { padding: 12px; }
+#teamFullScreen .tf-bar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+#teamFullScreen .tf-title { font-size:16px; font-weight:600; margin-right:auto; }
+#teamFullScreen .tf-btn { padding:7px 12px; border:1px solid #c9b487; background:#faf6ee; color:#5a4a2a; border-radius:8px; cursor:pointer; font-size:13px; }
+#teamFullScreen .tf-btn.primary { background:#4a9a4a; color:#fff; border-color:#4a9a4a; }
+#teamFullScreen .tf-month { display:inline-flex; align-items:center; gap:8px; font-size:14px; }
+#teamFullScreen .tf-month button { border:1px solid #ddd; background:#fff; border-radius:6px; cursor:pointer; padding:2px 8px; }
+#teamFullScreen .tf-status { font-size:12px; color:#888; }
+#teamColumns { display:flex; gap:12px; overflow-x:auto; padding-bottom:12px; align-items:flex-start; }
+#teamColumns .tf-col { flex:0 0 290px; border:1px solid #e5ddd0; border-radius:10px; background:#fff; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.05); }
+#teamColumns .tf-col-head { padding:10px; border-bottom:1px solid #eee; }
+#teamColumns .tf-col-name { font-weight:600; font-size:14px; }
+#teamColumns .tf-col-sub { font-size:11px; color:#888; margin:2px 0 6px; }
+#teamColumns .tf-col-valider { width:100%; padding:6px; background:#4a9a4a; color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:13px; }
+#teamColumns .tf-col-valider:disabled { background:#cfcfcf; cursor:default; }
+#teamColumns .tf-col-status { font-size:11px; margin-top:4px; min-height:14px; }
+#teamColumns .tf-col-body { max-height:68vh; overflow-y:auto; }
+#teamColumns .tf-col-body .day-row { padding:5px 8px; }
+</style>
+<div id="teamFullScreen" class="app-screen">
+  <div class="tf-bar">
+    <span class="tf-title">Équipe — vue complète</span>
+    <span class="tf-month">
+      <button onclick="teamFullChangeMonth(-1)">&lsaquo;</button>
+      <span id="teamFullMonth"></span>
+      <button onclick="teamFullChangeMonth(1)">&rsaquo;</button>
+    </span>
+    <button class="tf-btn" onclick="syncTeamFull()">⟳ Synchroniser</button>
+    <button class="tf-btn primary" onclick="validateAllTeam()">✓ Tout valider</button>
+    <button class="tf-btn" onclick="closeTeamFull()">Liste</button>
+  </div>
+  <div class="tf-status"><span id="teamFullSyncStatus"></span> <span id="teamFullGlobalStatus"></span></div>
+  <div id="teamColumns"></div>
 </div>
 
 <!-- ═══════════════ VALIDATION OVERLAY ═══════════════ -->
@@ -1109,6 +1152,8 @@ function showScreen(id) {
   document.getElementById('teamScreen').classList.remove('active');
   document.getElementById('settingsScreen').classList.remove('active');
   document.getElementById('validScreen').classList.remove('active');
+  var tfScr = document.getElementById('teamFullScreen');
+  if (tfScr) tfScr.classList.remove('active');
 
   if (id === 'login') {
     document.getElementById('loginScreen').classList.add('show');
@@ -1118,6 +1163,8 @@ function showScreen(id) {
     document.getElementById('settingsScreen').classList.add('active');
   } else if (id === 'valid') {
     document.getElementById('validScreen').classList.add('active');
+  } else if (id === 'teamFull') {
+    if (tfScr) tfScr.classList.add('active');
   }
 }
 
@@ -1187,6 +1234,8 @@ function doLogout() {
 
 async function loadTeamScreen(forceReloadTeam) {
   showScreen('team');
+  // PC (écran large) : ouvrir automatiquement la vue équipe complète.
+  if (typeof TEAMFULL_MQ !== 'undefined' && TEAMFULL_MQ.matches) { try { openTeamFull(); } catch(e) {} }
 
   // Utiliser le cache si disponible
   var cached = loadCachedCollabs();
@@ -1289,6 +1338,241 @@ function renderCollabs() {
   }
 
   document.getElementById('collabList').innerHTML = html || '<div class="collab-empty">Aucun collaborateur trouve.</div>';
+  // Si la vue complète (PC) est ouverte, rafraîchir ses colonnes (sans changer d'écran).
+  var _tf = document.getElementById('teamFullScreen');
+  if (_tf && _tf.classList.contains('active') && typeof renderTeamColumns === 'function') renderTeamColumns();
+}
+
+// ─── VUE ÉQUIPE COMPLÈTE (PC) ───────────────────────────────────────────────
+var TEAMFULL_MQ = window.matchMedia('(min-width: 1024px)');
+
+function applyResponsiveView() {
+  var tf = document.getElementById('teamFullScreen');
+  var team = document.getElementById('teamScreen');
+  if (!tf || !team) return;
+  var onTeam = team.classList.contains('active');
+  var onFull = tf.classList.contains('active');
+  if (TEAMFULL_MQ.matches) {
+    if (onTeam) openTeamFull();
+  } else {
+    if (onFull) showScreen('team');
+  }
+}
+try { TEAMFULL_MQ.addEventListener('change', applyResponsiveView); }
+catch(e) { try { TEAMFULL_MQ.addListener(applyResponsiveView); } catch(e2){} }
+
+function visibleCollabsList() {
+  var hidden = getHiddenCollabs();
+  var out = [];
+  for (var i = 0; i < COLLABS.length; i++) {
+    var c = COLLABS[i];
+    var cid = String(c.id || c.fullName || i);
+    if (hidden.indexOf(cid) === -1) out.push(c);
+  }
+  return out;
+}
+
+function openTeamFull() {
+  showScreen('teamFull');
+  renderTeamColumns();
+  var hasData = false;
+  for (var k in SYNC_CACHE) {
+    var c = SYNC_CACHE[k];
+    if (c && c.mois === CURRENT_MOIS && c.annee === CURRENT_ANNEE && c.days) { hasData = true; break; }
+  }
+  if (!hasData) syncTeamFull();
+}
+
+function closeTeamFull() { showScreen('team'); }
+
+function colDayRowsHtml(collabId, days, mois, annee) {
+  var daysInMonth = new Date(annee, mois, 0).getDate();
+  var html = '';
+  for (var d = 1; d <= daysInMonth; d++) {
+    var dateStr = annee + '-' + String(mois).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    var dd = (days && days[dateStr]) || {};
+    var dow = new Date(annee, mois - 1, d).getDay();
+    var isWeekend = dow === 0 || dow === 6;
+    var hasTravaille = dd.travaille;
+    var hasPlages = dd.plages && dd.plages.length > 0;
+    var isValSal = dd.valideSalarie;
+    var isValEnt = dd.valideEntreprise;
+    var allLower = ((dd.variable || '') + '|' + (dd.variables || '')).toLowerCase();
+    var isConge = allLower.indexOf('cong') > -1 || allLower.indexOf('rtt') > -1 || allLower.indexOf('maladie') > -1 || allLower.indexOf('absence') > -1 || allLower.indexOf('féri') > -1 || allLower.indexOf('chôm') > -1;
+    var rowClass = 'day-row';
+    if (isWeekend && !hasTravaille) rowClass += ' weekend';
+    else if (isConge) rowClass += ' conge';
+    else if (!hasTravaille && !hasPlages) rowClass += ' no-work';
+    var canCheck = isValSal && !isValEnt;
+    var isChecked = isValEnt || canCheck;
+    var cbClass = 'day-cb-wrap' + (isChecked ? ' checked' : '') + ((isValEnt || !canCheck) ? ' disabled' : '');
+    var displayPlages = hasPlages ? dd.plages : [];
+    if (!hasPlages && isConge && dd.variable) displayPlages = [{ debut: '08:00', fin: '17:00', tache: dd.variable, absence: true }];
+    var plagesText = '';
+    if (displayPlages.length > 0) {
+      plagesText = displayPlages.map(function(p){ return p.absence ? (p.tache || 'Absence') : (p.debut + '-' + p.fin); }).join(' | ');
+    } else if (dd.variable) plagesText = dd.variable;
+    else if (!hasTravaille && !isWeekend) plagesText = 'Non travaillé';
+    else if (isWeekend) plagesText = 'Week-end';
+    var hours = '';
+    if (dd.totalHeures) { var hh = Math.floor(dd.totalHeures / 60), mm = dd.totalHeures % 60; hours = hh + 'h' + (mm > 0 ? String(mm).padStart(2, '0') : ''); }
+    var badge = '';
+    if (isValEnt) badge = '<span class="day-badge badge-entreprise">Validé</span>';
+    else if (isValSal) badge = '<span class="day-badge badge-salarie">Salarié</span>';
+    else if (hasTravaille || hasPlages) badge = '<span class="day-badge badge-attente">En attente</span>';
+    var jourNom = JOUR_NOMS[dow];
+    html += '<div class="' + rowClass + '">';
+    html += '<div class="' + cbClass + '" data-collab="' + collabId + '" data-date="' + dateStr + '" onclick="toggleColCb(this)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></div>';
+    html += '<div class="day-info"><div class="day-date">' + jourNom + ' ' + d + '</div><div class="day-plages">' + escHtml(plagesText) + '</div></div>';
+    html += '<div class="day-hours">' + hours + '</div>';
+    html += '<div class="day-badges">' + badge + '</div>';
+    html += '</div>';
+  }
+  return html;
+}
+
+function colPendingCount(collabId) {
+  return document.querySelectorAll('.tf-col-body .day-cb-wrap.checked:not(.disabled)[data-collab="' + collabId + '"]').length;
+}
+
+function updateColValiderBtn(collabId) {
+  var n = colPendingCount(collabId);
+  var btn = document.querySelector('.tf-col-valider[data-collab="' + collabId + '"]');
+  if (btn) { btn.textContent = 'Valider (' + n + ')'; btn.disabled = n === 0; }
+}
+
+function toggleColCb(el) {
+  if (el.classList.contains('disabled')) return;
+  el.classList.toggle('checked');
+  updateColValiderBtn(el.getAttribute('data-collab'));
+}
+
+function renderTeamColumns() {
+  var mLabel = document.getElementById('teamFullMonth');
+  if (mLabel) mLabel.textContent = MOIS_NOMS[CURRENT_MOIS] + ' ' + CURRENT_ANNEE;
+  var visible = visibleCollabsList();
+  var html = '';
+  for (var v = 0; v < visible.length; v++) {
+    var c = visible[v];
+    var name = formatCollabName(c) || ('Collaborateur ' + (v + 1));
+    var cached = SYNC_CACHE[c.id];
+    var days = (cached && cached.mois === CURRENT_MOIS && cached.annee === CURRENT_ANNEE) ? cached.days : null;
+    var nbPend = 0, nbVal = 0;
+    if (days) { for (var dk in days) { var dd = days[dk]; if (dd.travaille) { if (dd.valideEntreprise) nbVal++; else if (dd.valideSalarie) nbPend++; } } }
+    html += '<div class="tf-col">';
+    html += '<div class="tf-col-head">';
+    html += '<div class="tf-col-name">' + escHtml(name) + '</div>';
+    html += '<div class="tf-col-sub">' + (days ? (nbVal + ' validés · ' + nbPend + ' en attente') : 'non synchronisé') + '</div>';
+    html += '<button class="tf-col-valider" data-collab="' + c.id + '" onclick="validateColumn(\'' + c.id + '\')"' + (nbPend === 0 ? ' disabled' : '') + '>Valider (' + nbPend + ')</button>';
+    html += '<div class="tf-col-status" id="tfstatus-' + c.id + '"></div>';
+    html += '</div>';
+    html += '<div class="tf-col-body">';
+    html += days ? colDayRowsHtml(c.id, days, CURRENT_MOIS, CURRENT_ANNEE) : '<div style="padding:14px;color:#999;font-size:12px;">Non synchronisé — clique « Synchroniser ».</div>';
+    html += '</div>';
+    html += '</div>';
+  }
+  var cont = document.getElementById('teamColumns');
+  if (cont) cont.innerHTML = html || '<div style="padding:20px;">Aucun collaborateur.</div>';
+}
+
+function _colCheckedDates(collabId) {
+  var cbs = document.querySelectorAll('.tf-col-body .day-cb-wrap.checked:not(.disabled)[data-collab="' + collabId + '"]');
+  var dates = [];
+  for (var i = 0; i < cbs.length; i++) dates.push(cbs[i].getAttribute('data-date'));
+  return dates;
+}
+
+function _applyValidatedToCache(collabId, dates) {
+  var cached = SYNC_CACHE[collabId];
+  if (cached && cached.days) {
+    for (var i = 0; i < dates.length; i++) { if (cached.days[dates[i]]) cached.days[dates[i]].valideEntreprise = true; }
+    try { localStorage.setItem('vm_sync_cache', JSON.stringify(SYNC_CACHE)); } catch(e) {}
+  }
+}
+
+async function validateColumn(collabId) {
+  var dates = _colCheckedDates(collabId);
+  if (dates.length === 0) return;
+  var status = document.getElementById('tfstatus-' + collabId);
+  if (status) status.textContent = '⏳ Validation…';
+  var btn = document.querySelector('.tf-col-valider[data-collab="' + collabId + '"]');
+  if (btn) btn.disabled = true;
+  try {
+    var resp = await fetch(CFG.server + '/valider-direct', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: CFG.email, password: CFG.password, url: CFG.url, salarieId: collabId, dates: dates, mois: CURRENT_MOIS, annee: CURRENT_ANNEE })
+    });
+    var data = await resp.json();
+    if (data && data.success) {
+      _applyValidatedToCache(collabId, dates);
+      renderTeamColumns();
+      var st2 = document.getElementById('tfstatus-' + collabId);
+      if (st2) st2.textContent = '✅ ' + dates.length + ' validé(s)';
+    } else {
+      if (status) status.textContent = '❌ ' + ((data && data.error) || 'Erreur');
+      if (btn) btn.disabled = false;
+    }
+  } catch (e) {
+    if (status) status.textContent = '❌ Erreur connexion';
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function validateAllTeam() {
+  var visible = visibleCollabsList();
+  var jobs = [];
+  visible.forEach(function(c){
+    var dates = _colCheckedDates(c.id);
+    if (dates.length === 0) return;
+    var status = document.getElementById('tfstatus-' + c.id);
+    if (status) status.textContent = '⏳ Validation…';
+    jobs.push(
+      fetch(CFG.server + '/valider-direct', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: CFG.email, password: CFG.password, url: CFG.url, salarieId: c.id, dates: dates, mois: CURRENT_MOIS, annee: CURRENT_ANNEE })
+      }).then(function(r){ return r.json(); }).then(function(data){
+        var st = document.getElementById('tfstatus-' + c.id);
+        if (data && data.success) { _applyValidatedToCache(c.id, dates); if (st) st.textContent = '✅ ' + dates.length; }
+        else if (st) st.textContent = '❌ ' + ((data && data.error) || 'Erreur');
+      }).catch(function(){ var st = document.getElementById('tfstatus-' + c.id); if (st) st.textContent = '❌ Erreur'; })
+    );
+  });
+  var gstatus = document.getElementById('teamFullGlobalStatus');
+  if (jobs.length === 0) { if (gstatus) { gstatus.textContent = 'Rien à valider.'; setTimeout(function(){ gstatus.textContent=''; }, 3000);} return; }
+  if (gstatus) gstatus.textContent = 'Validation en cours…';
+  await Promise.all(jobs);
+  renderTeamColumns();
+  if (gstatus) { gstatus.textContent = 'Terminé.'; setTimeout(function(){ gstatus.textContent = ''; }, 4000); }
+}
+
+async function syncTeamFull() {
+  var visible = visibleCollabsList();
+  var bar = document.getElementById('teamFullSyncStatus');
+  if (bar) bar.textContent = 'Connexion…';
+  try {
+    await fetch(CFG.server + '/ensure-session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: CFG.email, password: CFG.password, url: CFG.url }) });
+  } catch(e) {}
+  var done = 0, total = visible.length;
+  if (bar) bar.textContent = 'Synchronisation 0/' + total;
+  await Promise.all(visible.map(function(c){
+    return fetch(CFG.server + '/fetch-mois-direct', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: CFG.email, password: CFG.password, url: CFG.url, salarieId: c.id, mois: CURRENT_MOIS, annee: CURRENT_ANNEE })
+    }).then(function(r){ return r.json(); }).then(function(data){
+      if (data && data.success) { SYNC_CACHE[c.id] = { mois: CURRENT_MOIS, annee: CURRENT_ANNEE, days: data.days || {}, nomSalarie: data.nomSalarie || formatCollabName(c), timestamp: new Date().toISOString() }; }
+    }).catch(function(){}).then(function(){ done++; if (bar) bar.textContent = 'Synchronisation ' + done + '/' + total; });
+  }));
+  try { localStorage.setItem('vm_sync_cache', JSON.stringify(SYNC_CACHE)); } catch(e) {}
+  if (bar) bar.textContent = '';
+  renderTeamColumns();
+}
+
+function teamFullChangeMonth(delta) {
+  var m = CURRENT_MOIS + delta, y = CURRENT_ANNEE;
+  if (m < 1) { m = 12; y--; } else if (m > 12) { m = 1; y++; }
+  CURRENT_MOIS = m; CURRENT_ANNEE = y;
+  renderTeamColumns();
+  syncTeamFull();
 }
 
 function escHtml(s) {
