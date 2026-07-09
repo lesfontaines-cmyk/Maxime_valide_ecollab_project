@@ -880,6 +880,126 @@ def capture_save_selenium(email, password, url, salarie_id, dates, mois, annee):
             return False, f"Erreur capture : {e}"
 
 
+# ─── VALIDATION API DIRECTE (rapide, sans navigateur) ───────────────────────
+# On rejoue directement les requêtes eCollab capturées :
+#   GET  /Paie/VariablePaieAPI/GetVDPSalarie?idContrat=..&mois=..&annee=..
+#   POST /Paie/VariablePaieAPI/SaveVariablePaie?idContrat=..   body={"model": <modèle>}
+# Auth via cookie .ASPXAUTH récupéré par un login Selenium ponctuel (mis en cache).
+import requests as _requests
+
+_http_session = None
+_http_session_expiry = 0
+_http_session_key = None
+_login_lock = threading.Lock()
+
+
+def _base_url_of(url):
+    return '/'.join(url.split('/')[:3])
+
+
+def _ensure_http_session(email, password, url):
+    """Retourne (session requests authentifiée, base_url). Login Selenium ponctuel,
+    cookies transférés vers requests, cache TTL 8 min. Login sérialisé."""
+    global _http_session, _http_session_expiry, _http_session_key
+    base = _base_url_of(url)
+    key = (email, base)
+    now = time.time()
+    if _http_session is not None and _http_session_key == key and now < _http_session_expiry:
+        return _http_session, base
+
+    with _login_lock:
+        now = time.time()
+        if _http_session is not None and _http_session_key == key and now < _http_session_expiry:
+            return _http_session, base
+
+        driver = None
+        try:
+            driver = _make_driver()
+            today = datetime.date.today()
+            nav = _re.sub(r'mois=\d+', f'mois={today.month:02d}', url)
+            nav = _re.sub(r'annee=\d+', f'annee={today.year}', nav)
+            _navigate_ecol(driver, email, password, nav, today.month, today.year)
+            sel_cookies = driver.get_cookies()
+        finally:
+            if driver:
+                try: driver.quit()
+                except: pass
+
+        s = _requests.Session()
+        s.headers.update({
+            'User-Agent': 'Mozilla/5.0',
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json, text/plain, */*',
+        })
+        for c in sel_cookies:
+            try:
+                s.cookies.set(c['name'], c['value'], domain=c.get('domain') or None, path=c.get('path') or '/')
+            except Exception:
+                try: s.cookies.set(c['name'], c['value'])
+                except Exception: pass
+
+        _http_session = s
+        _http_session_key = key
+        _http_session_expiry = time.time() + 480
+        return s, base
+
+
+def _reset_http_session():
+    global _http_session, _http_session_expiry, _http_session_key
+    _http_session = None
+    _http_session_expiry = 0
+    _http_session_key = None
+
+
+def _get_vdp(session, base, id_contrat, mois, annee):
+    r = session.get(f"{base}/Paie/VariablePaieAPI/GetVDPSalarie",
+                    params={'idContrat': id_contrat, 'mois': f'{int(mois):02d}', 'annee': int(annee)},
+                    timeout=30)
+    r.raise_for_status()
+    return r.json()
+
+
+def valider_direct(email, password, url, id_contrat, dates, mois, annee, _retry=True):
+    """Validation rapide via l'API eCollab (GET modèle -> ValideeParEntreprise=true -> POST)."""
+    try:
+        session, base = _ensure_http_session(email, password, url)
+        model = _get_vdp(session, base, id_contrat, mois, annee)
+
+        if not isinstance(model, dict) or 'Jours' not in model:
+            return False, "Réponse GetVDPSalarie inattendue (pas de 'Jours')"
+
+        target = set(int(d.split('-')[2]) for d in dates)
+        n = 0
+        for j in model.get('Jours') or []:
+            try:
+                if int(j.get('Mois', 0)) == int(mois) and int(j.get('Annee', 0)) == int(annee) \
+                        and int(j.get('Jour', -1)) in target:
+                    j['ValideeParEntreprise'] = True
+                    n += 1
+            except Exception:
+                continue
+        if n == 0:
+            return False, "Aucun jour correspondant trouvé dans le modèle"
+
+        r = session.post(f"{base}/Paie/VariablePaieAPI/SaveVariablePaie",
+                         params={'idContrat': id_contrat},
+                         json={'model': model},
+                         headers={'Content-Type': 'application/json;charset=utf-8'},
+                         timeout=60)
+
+        if r.status_code in (401, 403) and _retry:
+            # cookie expiré → refresh session une fois
+            _reset_http_session()
+            return valider_direct(email, password, url, id_contrat, dates, mois, annee, _retry=False)
+
+        if not r.ok:
+            return False, f"Echec sauvegarde HTTP {r.status_code}"
+        return True, f"Validation réussie — {n} jour(s) validé(s)"
+
+    except Exception as e:
+        return False, f"Erreur validation directe : {e}"
+
+
 # ─── ROUTES API ──────────────────────────────────────────────────────────────
 
 @app.route("/ping", methods=["GET"])
@@ -1068,6 +1188,61 @@ def route_valider():
         return jsonify({"success": True, "message": message})
     else:
         return jsonify({"success": False, "error": message}), 500
+
+
+@app.route("/get-vdp", methods=["POST"])
+def route_get_vdp():
+    """Diagnostic (lecture seule) : vérifie l'auth + la structure du modèle GetVDPSalarie."""
+    data = request.get_json(force=True)
+    email      = (data.get("email")      or "").strip()
+    password   = (data.get("password")   or "").strip()
+    url        = (data.get("url")        or "").strip()
+    salarie_id = data.get("salarieId")
+    mois       = data.get("mois", datetime.date.today().month)
+    annee      = data.get("annee", datetime.date.today().year)
+
+    if not email or not password or not url or not salarie_id:
+        return jsonify({"success": False, "error": "Paramètres requis"}), 400
+    try:
+        session, base = _ensure_http_session(email, password, url)
+        model = _get_vdp(session, base, salarie_id, int(mois), int(annee))
+        keys = list(model.keys()) if isinstance(model, dict) else None
+        jours = model.get('Jours') if isinstance(model, dict) else None
+        sample = None
+        if jours:
+            j0 = jours[0]
+            sample = {k: j0.get(k) for k in
+                      ('Jour', 'Mois', 'Annee', 'DateString', 'EstTravaille',
+                       'ValideeParSalarie', 'ValideeParEntreprise')}
+        return jsonify({"success": True, "modelKeys": keys,
+                        "joursCount": len(jours or []), "sampleJour": sample})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/valider-direct", methods=["POST"])
+def route_valider_direct():
+    """Validation rapide (API directe eCollab, sans navigateur)."""
+    data = request.get_json(force=True)
+    email      = (data.get("email")      or "").strip()
+    password   = (data.get("password")   or "").strip()
+    url        = (data.get("url")        or "").strip()
+    salarie_id = data.get("salarieId")
+    dates      = data.get("dates", [])
+    mois       = data.get("mois", datetime.date.today().month)
+    annee      = data.get("annee", datetime.date.today().year)
+
+    if not email or not password or not url:
+        return jsonify({"success": False, "error": "Email, mot de passe et URL requis"}), 400
+    if not salarie_id:
+        return jsonify({"success": False, "error": "ID salarié requis"}), 400
+    if not dates:
+        return jsonify({"success": False, "error": "Aucune date à valider"}), 400
+
+    success, message = valider_direct(email, password, url, salarie_id, dates, int(mois), int(annee))
+    if success:
+        return jsonify({"success": True, "message": message})
+    return jsonify({"success": False, "error": message}), 500
 
 
 @app.route("/capture-save", methods=["POST"])
