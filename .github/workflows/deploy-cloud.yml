@@ -1,0 +1,47 @@
+name: Deploy to server (cloud)
+
+# Déploiement depuis un runner GitHub-hosted (ubuntu-latest, toujours disponible)
+# via SSH. Contrairement à deploy.yml (self-hosted), il ne dépend PAS d'une
+# machine à toi allumée.
+#
+# Pour l'instant : déclenchement MANUEL uniquement (workflow_dispatch), le temps
+# de valider. Une fois testé, on le passera en "on: push" et on retirera le
+# workflow self-hosted.
+#
+# Secrets requis (dans Settings > Secrets and variables > Actions) :
+#   SSH_PRIVATE_KEY  : clé privée SSH (nouvelle, dédiée au déploiement)
+#   SSH_USER         : utilisateur SSH (déjà présent)
+#   SSH_HOST         : hôte SSH PUBLIC, joignable depuis Internet (déjà présent)
+#   PROJECT_PATH     : chemin du dépôt sur le serveur (déjà présent)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup SSH key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+
+      - name: Deploy via SSH
+        run: |
+          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=accept-new \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} 'set -e
+            cd ${{ secrets.PROJECT_PATH }}
+            git fetch origin main
+            git reset --hard origin/main
+            CONTAINER=$(docker ps -qf ancestor=valide)
+            if [ -z "$CONTAINER" ]; then echo "Aucun conteneur valide en cours dexecution"; exit 1; fi
+            docker cp Maxime_valide_ecollab_serveur/server.py $CONTAINER:/app/server.py
+            docker cp Maxime_valide_ecollab_serveur/requirements.txt $CONTAINER:/tmp/requirements.txt
+            docker exec $CONTAINER pip install --break-system-packages -r /tmp/requirements.txt 2>&1 || echo WARN_PIP
+            docker restart $CONTAINER
+            echo "=== deployed ==="
+            docker ps --filter name=valide-serveur --format "{{.Names}} {{.Status}} {{.Ports}}"
+          '
