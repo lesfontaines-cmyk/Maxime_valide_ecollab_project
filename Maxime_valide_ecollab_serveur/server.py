@@ -1000,6 +1000,79 @@ def valider_direct(email, password, url, id_contrat, dates, mois, annee, _retry=
         return False, f"Erreur validation directe : {e}"
 
 
+def _model_to_days(model, mois, annee):
+    """Transforme le modèle eCollab (GetVDPSalarie) en structure d'affichage de l'app :
+       days[dateISO] = {plages, travaille, valideSalarie, valideEntreprise, totalHeures, variable, variables, taches}
+    """
+    days = {}
+    mois = int(mois); annee = int(annee)
+    for j in (model.get('Jours') or []):
+        try:
+            if int(j.get('Mois', 0)) != mois or int(j.get('Annee', 0)) != annee:
+                continue
+            jour = int(j.get('Jour'))
+        except Exception:
+            continue
+        date_key = f"{annee}-{mois:02d}-{jour:02d}"
+        plages = []
+        total_min = 0
+        variable = None
+        for h in (j.get('Horaires') or []):
+            hd = h.get('HeureDebut'); hf = h.get('HeureFin')
+            if hd is None or hf is None:
+                continue
+            try:
+                hd = int(hd); hf = int(hf)
+            except Exception:
+                continue
+            if hf > hd:
+                total_min += (hf - hd)
+            obs = h.get('ObservationCustom') or {}
+            is_abs = bool(obs.get('Value'))  # Value != 0 → congé / absence
+            tache = obs.get('Text') if is_abs else None
+            plages.append({
+                'debut': min_to_hhmm(hd),
+                'fin': min_to_hhmm(hf),
+                'tache': tache,
+                'absence': is_abs,
+            })
+            if is_abs and not variable:
+                variable = obs.get('Text')
+        if not variable and j.get('EstFerie') and j.get('FerieChome'):
+            variable = 'Férié chômé'
+        days[date_key] = {
+            'plages': plages,
+            'travaille': bool(j.get('EstTravaille')),
+            'valideSalarie': bool(j.get('ValideeParSalarie')),
+            'valideEntreprise': bool(j.get('ValideeParEntreprise')),
+            'totalHeures': total_min,
+            'variable': variable,
+            'variables': variable,
+            'taches': None,
+        }
+    return days
+
+
+def fetch_mois_direct(email, password, url, salarie_id, mois, annee, _retry=True):
+    """Lecture rapide du mois d'un collaborateur via l'API eCollab (sans navigateur)."""
+    try:
+        session, base = _ensure_http_session(email, password, url)
+        r = session.get(f"{base}/Paie/VariablePaieAPI/GetVDPSalarie",
+                        params={'idContrat': salarie_id, 'mois': f'{int(mois):02d}', 'annee': int(annee)},
+                        timeout=30)
+        if r.status_code in (401, 403) and _retry:
+            _reset_http_session()
+            return fetch_mois_direct(email, password, url, salarie_id, mois, annee, _retry=False)
+        r.raise_for_status()
+        model = r.json()
+        if not isinstance(model, dict):
+            return False, "Réponse GetVDPSalarie inattendue"
+        days = _model_to_days(model, mois, annee)
+        return True, {'days': days, 'nomSalarie': model.get('NomSalarie') or ''}
+    except Exception as e:
+        return False, f"Erreur lecture directe : {e}"
+
+
 # ─── ROUTES API ──────────────────────────────────────────────────────────────
 
 @app.route("/ping", methods=["GET"])
@@ -1243,6 +1316,44 @@ def route_valider_direct():
     if success:
         return jsonify({"success": True, "message": message})
     return jsonify({"success": False, "error": message}), 500
+
+
+@app.route("/ensure-session", methods=["POST"])
+def route_ensure_session():
+    """Prépare (login) la session HTTP directe, pour accélérer la synchro qui suit."""
+    data = request.get_json(force=True)
+    email    = (data.get("email")    or "").strip()
+    password = (data.get("password") or "").strip()
+    url      = (data.get("url")      or "").strip()
+    if not email or not password or not url:
+        return jsonify({"success": False, "error": "Email, mot de passe et URL requis"}), 400
+    try:
+        _ensure_http_session(email, password, url)
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/fetch-mois-direct", methods=["POST"])
+def route_fetch_mois_direct():
+    """Synchro rapide du mois d'un collaborateur (API directe, sans navigateur)."""
+    data = request.get_json(force=True)
+    email      = (data.get("email")      or "").strip()
+    password   = (data.get("password")   or "").strip()
+    url        = (data.get("url")        or "").strip()
+    salarie_id = data.get("salarieId")
+    mois       = data.get("mois", datetime.date.today().month)
+    annee      = data.get("annee", datetime.date.today().year)
+
+    if not email or not password or not url:
+        return jsonify({"success": False, "error": "Email, mot de passe et URL requis"}), 400
+    if not salarie_id:
+        return jsonify({"success": False, "error": "ID salarié requis"}), 400
+
+    ok, res = fetch_mois_direct(email, password, url, salarie_id, int(mois), int(annee))
+    if ok:
+        return jsonify({"success": True, "days": res['days'], "nomSalarie": res['nomSalarie']})
+    return jsonify({"success": False, "error": res}), 500
 
 
 @app.route("/capture-save", methods=["POST"])

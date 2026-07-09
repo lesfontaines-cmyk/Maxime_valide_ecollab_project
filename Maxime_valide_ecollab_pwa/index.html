@@ -930,16 +930,6 @@
     <button class="validate-btn" id="validateBtn" onclick="doValidate()">Valider la selection</button>
   </div>
   <div class="validate-result" id="validateResult"></div>
-
-  <!-- DIAGNOSTIC TEMPORAIRE : test de l'API directe (à retirer ensuite) -->
-  <div style="margin-top:14px;padding:10px;border:1px dashed #c9b487;border-radius:8px;font-size:12px;">
-    <div style="display:flex;gap:6px;flex-wrap:wrap;">
-      <button onclick="testGetVdp()" style="font-size:12px;padding:6px 10px;cursor:pointer;">🔍 Test lecture (sans risque)</button>
-      <button onclick="testValiderDirect()" style="font-size:12px;padding:6px 10px;cursor:pointer;">⚡ Test validation directe</button>
-    </div>
-    <div class="hint" style="margin-top:6px;">1) « Test lecture » vérifie la connexion (ne modifie rien). 2) sélectionne <b>1 jour</b> puis « Test validation directe » (⚡ ce jour sera réellement validé, en quelques secondes). Copie le résultat et envoie-le.</div>
-    <textarea id="captureOut" readonly style="width:100%;height:120px;margin-top:6px;font-family:monospace;font-size:11px;box-sizing:border-box;" placeholder="Le résultat apparaîtra ici…"></textarea>
-  </div>
 </div>
 
 <!-- ═══════════════ VALIDATION OVERLAY ═══════════════ -->
@@ -1318,23 +1308,23 @@ async function syncAllCollabs() {
   var annee = new Date().getFullYear();
   var total = visibles.length;
 
-  // Etape 1 : Connexion à eCollaboratrice (pre-login)
+  // Etape 1 : Connexion à eCollaboratrice (prépare la session HTTP directe)
   showLoading('Connexion à eCollaboratrice...');
   try {
-    await fetch(CFG.server + '/pre-login', {
+    await fetch(CFG.server + '/ensure-session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: CFG.email, password: CFG.password, url: CFG.url })
     });
-  } catch(e) { console.error('Pre-login error', e); }
+  } catch(e) { console.error('ensure-session error', e); }
 
-  // Etape 2 : Synchronisation de chaque collaborateur
+  // Etape 2 : Synchronisation de chaque collaborateur (API directe, rapide)
   for (var v = 0; v < visibles.length; v++) {
     var c = visibles[v];
     var name = formatCollabName(c);
     showLoading('Synchronisation ' + (v + 1) + '/' + total + ' — ' + name);
     try {
-      var resp = await fetch(CFG.server + '/fetch-mois', {
+      var resp = await fetch(CFG.server + '/fetch-mois-direct', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1490,7 +1480,7 @@ async function loadMonth() {
   showLoading('Mise a jour...');
 
   try {
-    var resp = await fetch(CFG.server + '/fetch-mois', {
+    var resp = await fetch(CFG.server + '/fetch-mois-direct', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1801,54 +1791,6 @@ async function doValidate() {
 
 function cancelValidation() {
   if (_validAbort) _validAbort.abort();
-}
-
-// DIAGNOSTIC TEMPORAIRE : test API directe (à retirer ensuite)
-async function testGetVdp() {
-  var out = document.getElementById('captureOut');
-  if (!CURRENT_COLLAB) { out.value = 'Ouvre d\'abord un collaborateur.'; return; }
-  out.value = 'Test lecture en cours (login + lecture, ~15 s)...';
-  var t0 = Date.now();
-  try {
-    var resp = await fetch(CFG.server + '/get-vdp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: CFG.email, password: CFG.password, url: CFG.url,
-        salarieId: CURRENT_COLLAB.id, mois: CURRENT_MOIS, annee: CURRENT_ANNEE
-      })
-    });
-    var data = await resp.json();
-    data._tempsSecondes = ((Date.now() - t0) / 1000).toFixed(1);
-    out.value = JSON.stringify(data, null, 2);
-  } catch (e) {
-    out.value = 'Erreur: ' + e;
-  }
-}
-
-async function testValiderDirect() {
-  var out = document.getElementById('captureOut');
-  if (!CURRENT_COLLAB) { out.value = 'Ouvre d\'abord un collaborateur.'; return; }
-  var dates = getSelectedDates();
-  if (dates.length === 0) { out.value = 'Sélectionne au moins 1 jour à valider.'; return; }
-  out.value = 'Validation directe en cours...';
-  var t0 = Date.now();
-  try {
-    var resp = await fetch(CFG.server + '/valider-direct', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: CFG.email, password: CFG.password, url: CFG.url,
-        salarieId: CURRENT_COLLAB.id, dates: [dates[0]],
-        mois: CURRENT_MOIS, annee: CURRENT_ANNEE
-      })
-    });
-    var data = await resp.json();
-    data._tempsSecondes = ((Date.now() - t0) / 1000).toFixed(1);
-    out.value = JSON.stringify(data, null, 2);
-  } catch (e) {
-    out.value = 'Erreur: ' + e;
-  }
 }
 
 var STEP_LABELS = ['Connexion à eCollaboratrice', 'Validation des jours', 'Sauvegarde'];
