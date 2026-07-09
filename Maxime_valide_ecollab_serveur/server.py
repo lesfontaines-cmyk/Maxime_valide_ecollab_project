@@ -897,9 +897,45 @@ def _base_url_of(url):
     return '/'.join(url.split('/')[:3])
 
 
+def _http_login(session, email, password, base_url):
+    """Login HTTP direct eCollab (POST /Auth/Login, sans navigateur).
+    Retourne (True, None) si connecté, sinon (False, message)."""
+    headers = {
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept': 'application/json, text/javascript, */*; q=0.01',
+    }
+    data = {'mail': email, 'motdepasse': password, 'rememberMe': 'true'}
+    r = session.post(f"{base_url}/Auth/Login", data=data, headers=headers, timeout=30)
+    try:
+        j = r.json()
+    except Exception:
+        j = None
+
+    # Email associé à plusieurs comptes → re-poster avec idUtilisateur
+    if isinstance(j, dict) and j.get('utilisateurs'):
+        users = j.get('utilisateurs') or []
+        uid = None
+        for u in users:
+            if isinstance(u, dict) and not u.get('Desactive'):
+                uid = u.get('Id'); break
+        if uid is None and users and isinstance(users[0], dict):
+            uid = users[0].get('Id')
+        if uid is not None:
+            d2 = dict(data); d2['idUtilisateur'] = uid
+            r = session.post(f"{base_url}/Auth/Login", data=d2, headers=headers, timeout=30)
+            try: j = r.json()
+            except Exception: j = None
+
+    if any(c.name == '.ASPXAUTH' for c in session.cookies):
+        return True, None
+    msg = j.get('message') if isinstance(j, dict) else None
+    return False, msg or f"Echec de connexion (HTTP {r.status_code})"
+
+
 def _ensure_http_session(email, password, url):
-    """Retourne (session requests authentifiée, base_url). Login Selenium ponctuel,
-    cookies transférés vers requests, cache TTL 8 min. Login sérialisé."""
+    """Retourne (session requests authentifiée, base_url).
+    Login HTTP direct (~1 s) ; Selenium en repli si le HTTP échoue pour une
+    raison inattendue. Session mise en cache (TTL = durée de vie du cookie)."""
     global _http_session, _http_session_expiry, _http_session_key
     base = _base_url_of(url)
     key = (email, base)
@@ -912,44 +948,58 @@ def _ensure_http_session(email, password, url):
         if _http_session is not None and _http_session_key == key and now < _http_session_expiry:
             return _http_session, base
 
-        driver = None
-        try:
-            driver = _make_driver()
-            today = datetime.date.today()
-            nav = _re.sub(r'mois=\d+', f'mois={today.month:02d}', url)
-            nav = _re.sub(r'annee=\d+', f'annee={today.year}', nav)
-            _navigate_ecol(driver, email, password, nav, today.month, today.year)
-            sel_cookies = driver.get_cookies()
-        finally:
-            if driver:
-                try: driver.quit()
-                except: pass
-
         s = _requests.Session()
         s.headers.update({
             'User-Agent': 'Mozilla/5.0',
             'X-Requested-With': 'XMLHttpRequest',
             'Accept': 'application/json, text/plain, */*',
         })
-        for c in sel_cookies:
-            try:
-                s.cookies.set(c['name'], c['value'], domain=c.get('domain') or None, path=c.get('path') or '/')
-            except Exception:
-                try: s.cookies.set(c['name'], c['value'])
-                except Exception: pass
+        host = base.replace('https://', '').replace('http://', '')
+        try: s.cookies.set('alert-rgpd', 'true', domain=host, path='/')
+        except Exception: pass
 
-        # Durée de vie du cache = celle du cookie .ASPXAUTH si connue (souvent
-        # longue), sinon repli à 25 min. Le re-login auto (sur 401/403) reste le
-        # filet de sécurité si le cookie meurt avant. Borné à 6 h par sécurité.
-        now2 = time.time()
-        ttl = 1500  # 25 min par défaut
-        for c in sel_cookies:
-            if c.get('name') == '.ASPXAUTH' and c.get('expiry'):
+        # 1) Login HTTP direct (rapide)
+        ok, msg = False, None
+        try:
+            ok, msg = _http_login(s, email, password, base)
+        except Exception as e:
+            ok, msg = False, str(e)
+
+        # 2) Identifiants clairement incorrects → inutile de tenter Selenium
+        if not ok and msg and ('incorrect' in msg.lower() or 'mot de passe' in msg.lower()):
+            raise RuntimeError(msg)
+
+        # 3) Repli Selenium si le HTTP a échoué pour une autre raison
+        if not ok:
+            driver = None
+            try:
+                driver = _make_driver()
+                today = datetime.date.today()
+                nav = _re.sub(r'mois=\d+', f'mois={today.month:02d}', url)
+                nav = _re.sub(r'annee=\d+', f'annee={today.year}', nav)
+                _navigate_ecol(driver, email, password, nav, today.month, today.year)
+                sel_cookies = driver.get_cookies()
+            finally:
+                if driver:
+                    try: driver.quit()
+                    except: pass
+            for c in sel_cookies:
                 try:
-                    ttl = int(c['expiry']) - now2 - 60
+                    s.cookies.set(c['name'], c['value'], domain=c.get('domain') or None, path=c.get('path') or '/')
                 except Exception:
-                    pass
-                break
+                    try: s.cookies.set(c['name'], c['value'])
+                    except Exception: pass
+
+        # TTL = durée de vie du cookie .ASPXAUTH si connue, sinon 25 min. Borné 6 h.
+        now2 = time.time()
+        ttl = 1500
+        try:
+            for c in s.cookies:
+                if c.name == '.ASPXAUTH' and c.expires:
+                    ttl = int(c.expires) - now2 - 60
+                    break
+        except Exception:
+            pass
         ttl = max(300, min(ttl, 6 * 3600))
 
         _http_session = s
