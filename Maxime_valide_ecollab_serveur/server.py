@@ -938,9 +938,23 @@ def _ensure_http_session(email, password, url):
                 try: s.cookies.set(c['name'], c['value'])
                 except Exception: pass
 
+        # Durée de vie du cache = celle du cookie .ASPXAUTH si connue (souvent
+        # longue), sinon repli à 25 min. Le re-login auto (sur 401/403) reste le
+        # filet de sécurité si le cookie meurt avant. Borné à 6 h par sécurité.
+        now2 = time.time()
+        ttl = 1500  # 25 min par défaut
+        for c in sel_cookies:
+            if c.get('name') == '.ASPXAUTH' and c.get('expiry'):
+                try:
+                    ttl = int(c['expiry']) - now2 - 60
+                except Exception:
+                    pass
+                break
+        ttl = max(300, min(ttl, 6 * 3600))
+
         _http_session = s
         _http_session_key = key
-        _http_session_expiry = time.time() + 480
+        _http_session_expiry = time.time() + ttl
         return s, base
 
 
