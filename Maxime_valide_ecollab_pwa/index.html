@@ -899,6 +899,13 @@
   <div class="valid-collab-name" id="validCollabName"></div>
   <div class="valid-last-sync" id="validLastSync"></div>
 
+  <div style="text-align:center;margin:8px 0 2px;">
+    <button id="resyncBtn" onclick="resyncCollab()" style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;font-size:13px;border:1px solid #c9b487;background:#faf6ee;color:#5a4a2a;border-radius:20px;cursor:pointer;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+      Resynchroniser
+    </button>
+  </div>
+
   <!-- Month navigation -->
   <div class="month-nav">
     <button class="month-nav-btn" onclick="changeMonth(-1)">
@@ -1521,6 +1528,19 @@ async function loadMonth() {
   }
 
   hideLoading();
+}
+
+// Resynchronise le collaborateur affiché (recharge son mois via l'API directe).
+async function resyncCollab() {
+  if (!CURRENT_COLLAB) return;
+  var btn = document.getElementById('resyncBtn');
+  var label = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; btn.innerHTML = '⏳ Synchronisation…'; }
+  try {
+    await loadMonth();
+  } finally {
+    if (btn) { btn.disabled = false; btn.style.opacity = ''; btn.innerHTML = label; }
+  }
 }
 
 function renderDays() {
