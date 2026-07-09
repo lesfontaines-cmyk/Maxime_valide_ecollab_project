@@ -20,6 +20,10 @@ _validation_lock = threading.Lock()
 app = Flask(__name__)
 CORS(app)
 
+# Marqueur de déploiement : permet de vérifier qu'une modif poussée depuis la CLI
+# est bien arrivée en production (visible sur GET /ping).
+DEPLOY_MARKER = "cli-deploy-test-2026-07-09"
+
 # ─── UTILS ───────────────────────────────────────────────────────────────────
 def to_minutes(hhmm):
     h, m = map(int, hhmm.split(":"))
@@ -756,7 +760,7 @@ def _valider_jours_selenium_locked(email, password, url, salarie_id, dates, mois
 
 @app.route("/ping", methods=["GET"])
 def ping():
-    return jsonify({"status": "ok", "message": "Serveur Validation Manager opérationnel"})
+    return jsonify({"status": "ok", "message": "Serveur Validation Manager opérationnel", "deploy_marker": DEPLOY_MARKER})
 
 
 @app.route("/pre-login", methods=["POST"])
