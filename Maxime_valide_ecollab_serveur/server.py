@@ -756,6 +756,130 @@ def _valider_jours_selenium_locked(email, password, url, salarie_id, dates, mois
         return False, f"Erreur inattendue : {e}"
 
 
+# ─── CAPTURE RÉSEAU (rétro-ingénierie API eCollab) ──────────────────────────
+# Intercepteur injecté dans la page : enregistre chaque fetch/XHR (url, méthode,
+# en-têtes, corps) dans window.__vmCapture. Sert à capturer UNE fois la vraie
+# requête déclenchée par "Sauvegarder" pour ensuite la rejouer en HTTP direct.
+_CAPTURE_JS = r"""
+(function(){
+  if (window.__vmCaptureInstalled) return 'ALREADY';
+  window.__vmCaptureInstalled = true;
+  window.__vmCapture = [];
+  var origFetch = window.fetch;
+  if (origFetch) {
+    window.fetch = function(input, init){
+      try {
+        var url = (typeof input === 'string') ? input : (input && input.url);
+        var method = (init && init.method) || (input && input.method) || 'GET';
+        var body = (init && init.body) || null;
+        var headers = {};
+        try { if (init && init.headers) new Headers(init.headers).forEach(function(v,k){ headers[k]=v; }); } catch(e){}
+        window.__vmCapture.push({kind:'fetch', url:String(url), method:String(method), headers:headers, body:(typeof body==='string')?body:null});
+      } catch(e){}
+      return origFetch.apply(this, arguments);
+    };
+  }
+  var op = XMLHttpRequest.prototype.open;
+  var se = XMLHttpRequest.prototype.send;
+  var sh = XMLHttpRequest.prototype.setRequestHeader;
+  XMLHttpRequest.prototype.open = function(m, u){ this.__cap = {kind:'xhr', method:String(m), url:String(u), headers:{}}; return op.apply(this, arguments); };
+  XMLHttpRequest.prototype.setRequestHeader = function(k, v){ try{ if(this.__cap) this.__cap.headers[k]=v; }catch(e){} return sh.apply(this, arguments); };
+  XMLHttpRequest.prototype.send = function(b){ try{ if(this.__cap){ this.__cap.body=(typeof b==='string')?b:null; window.__vmCapture.push(this.__cap);} }catch(e){} return se.apply(this, arguments); };
+  return 'INSTALLED';
+})();
+"""
+
+
+def capture_save_selenium(email, password, url, salarie_id, dates, mois, annee):
+    """Valide UN jour comme d'habitude MAIS en interceptant les requêtes réseau,
+    afin de récupérer la vraie requête de sauvegarde eCollab (URL, méthode,
+    en-têtes, corps). Diagnostic uniquement — sera retiré ensuite."""
+    with _validation_lock:
+        driver = None
+        try:
+            close_shared_driver()
+            driver = _make_driver()
+            url_collab = _re.sub(r'idContrat=\d+', f'idContrat={salarie_id}', url)
+            _navigate_ecol(driver, email, password, url_collab, int(mois), int(annee))
+
+            # Installer l'intercepteur AVANT toute action
+            driver.execute_script(_CAPTURE_JS)
+
+            # Vue AU MOIS
+            driver.execute_script("""
+                var btns = document.querySelectorAll('button, a, div');
+                for (var i = 0; i < btns.length; i++) {
+                    if (btns[i].textContent.trim().toUpperCase() === 'AU MOIS') { btns[i].click(); break; }
+                }
+            """)
+            time.sleep(2)
+
+            # Valider UN seul jour (suffisant pour déclencher la sauvegarde)
+            jour_num = int(dates[0].split('-')[2])
+            jour_str = f"{jour_num:02d}/{int(mois):02d}"
+            driver.execute_script(f"""
+                var rows = document.querySelectorAll('tr');
+                for (var r = 0; r < rows.length; r++) {{
+                    var cells = rows[r].querySelectorAll('td');
+                    if (cells.length < 2) continue;
+                    if (cells[0].textContent.trim().indexOf('{jour_str}') === -1) continue;
+                    var plageDiv = rows[r].querySelector('div[data-tippy-content]');
+                    if (plageDiv) {{ plageDiv.click(); return; }}
+                    if (cells[1]) {{ cells[1].click(); return; }}
+                }}
+            """)
+            time.sleep(1.5)
+            driver.execute_script("""
+                var modal = document.querySelector('.modal.show');
+                if (modal) { var b = modal.querySelector('button.btn-success.btn-xs'); if (b) b.click(); }
+            """)
+            time.sleep(1)
+            driver.execute_script("""
+                var modal = document.querySelector('.modal.show');
+                if (modal) {
+                    var btns = modal.querySelectorAll('button');
+                    for (var i = 0; i < btns.length; i++) {
+                        if (btns[i].textContent.trim().indexOf('Fermer') > -1) { btns[i].click(); return; }
+                    }
+                    var c = modal.querySelector('button.close'); if (c) c.click();
+                }
+            """)
+            time.sleep(1.5)
+            driver.execute_script("window.scrollTo(0, 0);")
+            time.sleep(1)
+
+            # Sauvegarder → déclenche la requête qu'on veut capturer
+            driver.execute_script("""
+                var btns = document.querySelectorAll('button.btn-primary');
+                for (var i = 0; i < btns.length; i++) {
+                    if (btns[i].textContent.trim() === 'Sauvegarder') { btns[i].click(); return; }
+                }
+            """)
+            time.sleep(6)
+
+            captures = driver.execute_script("return window.__vmCapture || [];")
+            cookie_names = []
+            try:
+                cookie_names = [c.get('name') for c in driver.get_cookies()]
+            except Exception:
+                pass
+            driver.quit()
+
+            # Rédaction des valeurs sensibles (on garde les clés/structure)
+            for c in (captures or []):
+                h = c.get('headers') or {}
+                for k in list(h.keys()):
+                    if k.lower() in ('cookie', 'authorization'):
+                        h[k] = '[REDACTED]'
+            return True, {"captures": captures or [], "cookieNames": cookie_names}
+
+        except Exception as e:
+            if driver:
+                try: driver.quit()
+                except: pass
+            return False, f"Erreur capture : {e}"
+
+
 # ─── ROUTES API ──────────────────────────────────────────────────────────────
 
 @app.route("/ping", methods=["GET"])
@@ -944,6 +1068,29 @@ def route_valider():
         return jsonify({"success": True, "message": message})
     else:
         return jsonify({"success": False, "error": message}), 500
+
+
+@app.route("/capture-save", methods=["POST"])
+def route_capture_save():
+    """Diagnostic : capture la requête réseau de sauvegarde eCollab (1 jour)."""
+    data = request.get_json(force=True)
+    email      = (data.get("email")      or "").strip()
+    password   = (data.get("password")   or "").strip()
+    url        = (data.get("url")        or "").strip()
+    salarie_id = data.get("salarieId")
+    dates      = data.get("dates", [])
+    mois       = data.get("mois", datetime.date.today().month)
+    annee      = data.get("annee", datetime.date.today().year)
+
+    if not email or not password or not url:
+        return jsonify({"success": False, "error": "Email, mot de passe et URL requis"}), 400
+    if not salarie_id or not dates:
+        return jsonify({"success": False, "error": "ID salarié et au moins une date requis"}), 400
+
+    success, result = capture_save_selenium(email, password, url, salarie_id, dates, int(mois), int(annee))
+    if success:
+        return jsonify({"success": True, **result})
+    return jsonify({"success": False, "error": result}), 500
 
 
 @app.route("/debug-vue", methods=["POST"])
