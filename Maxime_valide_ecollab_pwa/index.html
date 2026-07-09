@@ -1748,16 +1748,14 @@ async function doValidate() {
   var mois = CURRENT_MOIS;
   var annee = CURRENT_ANNEE;
 
-  // Optimistic update: marquer les jours validés dans MONTH_DATA + SYNC_CACHE
+  // Applique le résultat SEULEMENT après confirmation serveur (pas d'optimisme).
   function applyValidation(value) {
-    // 1) Mémoire active si on est toujours sur ce collab
     if (CURRENT_COLLAB && CURRENT_COLLAB.id === collabId) {
       for (var i = 0; i < dates.length; i++) {
         if (MONTH_DATA[dates[i]]) MONTH_DATA[dates[i]].valideEntreprise = value;
       }
       renderDays();
     }
-    // 2) Cache du collab (peut être différent de MONTH_DATA si l'utilisateur est parti)
     var cached = SYNC_CACHE[collabId];
     if (cached && cached.mois === mois && cached.annee === annee && cached.days) {
       for (var j = 0; j < dates.length; j++) {
@@ -1767,46 +1765,38 @@ async function doValidate() {
     }
   }
 
-  applyValidation(true);
-
-  // Toast persistant identifié par collab+timestamp → sera remplacé par le résultat
-  // (le serveur sérialise les validations pour eviter les conflits de session eCollab)
+  // UX honnête : le bouton montre l'état réel, rien ne passe vert avant confirmation.
   var toastId = 'valid_' + collabId + '_' + Date.now();
-  var queueMsg = (_activeValidations === 0)
-    ? collabName + ' : validation de ' + nbJours + ' jour(s) en cours...'
-    : collabName + ' : ' + nbJours + ' jour(s) en file d\'attente...';
-  showToast('info', queueMsg, {id: toastId});
+  var btn = document.getElementById('validateBtn');
+  var btnLabel = btn ? btn.textContent : 'Valider la selection';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Validation en cours…'; }
+  showToast('info', collabName + ' : validation de ' + nbJours + ' jour(s) en cours…', {id: toastId});
   _activeValidations++;
-  document.getElementById('validateBtn').disabled = false;
 
-  // Fire-and-forget: send request in background
-  fetch(CFG.server + '/valider', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      email: CFG.email,
-      password: CFG.password,
-      url: CFG.url,
-      salarieId: collabId,
-      dates: dates,
-      mois: mois,
-      annee: annee
-    })
-  }).then(function(resp) { return resp.json(); })
-    .then(function(data) {
-      if (data.success) {
-        showToast('success', collabName + ' : ' + nbJours + ' jour(s) valide(s)', {id: toastId});
-      } else {
-        applyValidation(false);
-        showToast('error', collabName + ' : ' + (data.error || 'Erreur de validation'), {id: toastId});
-      }
-    }).catch(function(e) {
-      applyValidation(false);
-      showToast('error', collabName + ' : Erreur de connexion', {id: toastId});
-    }).finally(function() {
-      _activeValidations--;
-      if (_activeValidations < 0) _activeValidations = 0;
+  try {
+    var resp = await fetch(CFG.server + '/valider-direct', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: CFG.email, password: CFG.password, url: CFG.url,
+        salarieId: collabId, dates: dates, mois: mois, annee: annee
+      })
     });
+    var data = await resp.json();
+    if (data && data.success) {
+      applyValidation(true);   // confirmé → vert
+      showToast('success', collabName + ' : ' + nbJours + ' jour(s) validé(s) ✓', {id: toastId});
+    } else {
+      showToast('error', collabName + ' : ' + ((data && data.error) || 'Erreur de validation'), {id: toastId});
+    }
+  } catch (e) {
+    showToast('error', collabName + ' : Erreur de connexion', {id: toastId});
+  } finally {
+    _activeValidations--;
+    if (_activeValidations < 0) _activeValidations = 0;
+    if (btn) btn.textContent = btnLabel || 'Valider la selection';
+    updateTotalSelected();   // ré-active le bouton selon la sélection restante
+  }
 }
 
 function cancelValidation() {

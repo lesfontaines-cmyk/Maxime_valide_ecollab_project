@@ -5,7 +5,7 @@
 // Ce seul changement declenche le cycle complet de mise a jour.
 // =============================================
 
-var APP_VERSION = '1.4.4';
+var APP_VERSION = '1.4.5';
 var CACHE_NAME  = 'validation-cm-v' + APP_VERSION;
 
 var PRECACHE_FILES = [
