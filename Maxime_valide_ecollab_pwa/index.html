@@ -1268,14 +1268,17 @@ function renderCollabs() {
         var dd = cached.days[dk];
         if (dd.travaille) {
           nbJours++;
-          totalH += (dd.totalHeures || 0);
-          if (dd.valideEntreprise) nbValide++;
+          if (dd.valideEntreprise) {
+            nbValide++;
+            totalH += (dd.totalHeures || 0);   // n'additionne QUE les heures validées
+          }
         }
       }
       var hh = Math.floor(totalH / 60);
       var mm = totalH % 60;
-      syncInfo = '<span class="collab-sync">' + hh + 'h' + (mm > 0 ? String(mm).padStart(2, '0') : '') +
-                 ' — ' + nbValide + '/' + nbJours + ' valides</span>';
+      var hStr = hh + 'h' + (mm > 0 ? String(mm).padStart(2, '0') : '');
+      syncInfo = '<span class="collab-sync">' + nbValide + '/' + nbJours + ' validés · ' +
+                 hStr + ' validées</span>';
     }
 
     html += '<div class="collab-card" onclick="selectCollab(' + idx + ')">' +
