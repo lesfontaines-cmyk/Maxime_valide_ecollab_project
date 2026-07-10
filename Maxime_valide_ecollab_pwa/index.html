@@ -967,8 +967,11 @@ body.pc-full-active { max-width: 100% !important; }
 #teamFullScreen .tf-month button:hover { border-color:var(--gold); }
 #teamFullScreen .tf-status { font-size:12px; color:var(--light); }
 #teamColumns { display:flex; gap:12px; overflow:auto; max-height:calc(100vh - 122px); padding-bottom:12px; align-items:flex-start; justify-content:safe center; }
-#teamColumns .tf-col { flex:0 0 300px; border:1px solid var(--border); border-radius:8px; background:var(--white); box-shadow:0 1px 3px rgba(20,16,8,.06); }
-#teamColumns .tf-col-head { padding:12px 10px; border-bottom:1px solid var(--cream2); position:sticky; top:0; z-index:2; background:var(--white); border-radius:8px 8px 0 0; }
+#teamColumns .tf-col { flex:0 0 300px; border-radius:8px; background:var(--white); box-shadow:0 1px 3px rgba(20,16,8,.06); }
+/* Le cadre est porté par l'en-tête collant + le corps (et non par .tf-col) : ainsi
+   le haut de la colonne reste bien bordé/arrondi meme apres avoir scrolle. */
+#teamColumns .tf-col-head { padding:12px 10px; position:sticky; top:0; z-index:2; background:var(--white); border:1px solid var(--border); border-bottom:1px solid var(--cream2); border-radius:8px 8px 0 0; }
+#teamColumns .tf-col-body { border:1px solid var(--border); border-top:none; border-radius:0 0 8px 8px; }
 #teamColumns .tf-col-name { font-family:var(--serif); font-size:18px; color:var(--gold); letter-spacing:1px; text-align:center; }
 #teamColumns .tf-col-sub { font-size:11px; letter-spacing:.5px; color:var(--light); margin:4px 0 9px; text-align:center; }
 #teamColumns .tf-col-valider { width:100%; padding:9px; background:var(--green); color:var(--white); border:none; border-radius:4px; cursor:pointer; font-family:var(--sans); font-size:12px; letter-spacing:1px; text-transform:uppercase; transition:all .2s; }
