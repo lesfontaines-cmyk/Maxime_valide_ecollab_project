@@ -1064,12 +1064,41 @@ def valider_direct(email, password, url, id_contrat, dates, mois, annee, _retry=
         return False, f"Erreur validation directe : {e}"
 
 
+def _obs_code(val):
+    """Normalise un code Observation eCollab en entier (0 = normal / pas d'absence)."""
+    try:
+        return int(val) if val is not None else 0
+    except Exception:
+        return 0
+
+
+def _build_observation_labels(model):
+    """Table de correspondance code Observation (entier) -> libellé d'absence.
+
+    eCollab n'inscrit sur chaque horaire qu'un code entier (champ `Observation`,
+    ex. 27). Le libellé humain ("Absence maladie vie privée non rémunérée") est
+    listé une seule fois au niveau du mois dans `AbsencesSurLeMois[].CustomObservation`.
+    """
+    labels = {}
+    for a in (model.get('AbsencesSurLeMois') or []):
+        co = a.get('CustomObservation') or {}
+        txt = co.get('Text')
+        if not txt:
+            continue
+        for code in (co.get('Value'), a.get('Type')):
+            c = _obs_code(code)
+            if c:
+                labels[c] = txt
+    return labels
+
+
 def _model_to_days(model, mois, annee):
     """Transforme le modèle eCollab (GetVDPSalarie) en structure d'affichage de l'app :
        days[dateISO] = {plages, travaille, valideSalarie, valideEntreprise, totalHeures, variable, variables, taches}
     """
     days = {}
     mois = int(mois); annee = int(annee)
+    obs_labels = _build_observation_labels(model)
     for j in (model.get('Jours') or []):
         try:
             if int(j.get('Mois', 0)) != mois or int(j.get('Annee', 0)) != annee:
@@ -1081,6 +1110,9 @@ def _model_to_days(model, mois, annee):
         plages = []
         total_min = 0
         variable = None
+        all_abs = True
+        day_start = None
+        day_end = None
         for h in (j.get('Horaires') or []):
             hd = h.get('HeureDebut'); hf = h.get('HeureFin')
             if hd is None or hf is None:
@@ -1091,17 +1123,39 @@ def _model_to_days(model, mois, annee):
                 continue
             if hf > hd:
                 total_min += (hf - hd)
-            obs = h.get('ObservationCustom') or {}
-            is_abs = bool(obs.get('Value'))  # Value != 0 → congé / absence
-            tache = obs.get('Text') if is_abs else None
+            if day_start is None or hd < day_start:
+                day_start = hd
+            if day_end is None or hf > day_end:
+                day_end = hf
+            # L'absence est portée par un code entier dans `Observation` (0 = normal).
+            label = obs_labels.get(_obs_code(h.get('Observation')))
+            is_abs = bool(label)
+            if not is_abs:
+                all_abs = False
             plages.append({
                 'debut': min_to_hhmm(hd),
                 'fin': min_to_hhmm(hf),
-                'tache': tache,
+                'tache': label,
                 'absence': is_abs,
             })
             if is_abs and not variable:
-                variable = obs.get('Text')
+                variable = label
+        # Fallback : absence portée par la demi-journée (Matin / ApresMidi) sans horaire détaillé
+        if not variable:
+            for slot in ('Matin', 'ApresMidi'):
+                lbl = obs_labels.get(_obs_code((j.get(slot) or {}).get('Observation')))
+                if lbl:
+                    variable = lbl
+                    break
+        # Journée entièrement en absence : présenter une seule bande "pleine journée"
+        # (comme eCollab) au lieu de répéter le libellé sur chaque plage.
+        if variable and all_abs and len(plages) > 1 and day_start is not None:
+            plages = [{
+                'debut': min_to_hhmm(day_start),
+                'fin': min_to_hhmm(day_end),
+                'tache': variable,
+                'absence': True,
+            }]
         if not variable and j.get('EstFerie') and j.get('FerieChome'):
             variable = 'Férié chômé'
         days[date_key] = {
