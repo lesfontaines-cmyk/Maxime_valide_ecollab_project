@@ -1000,7 +1000,7 @@ body.pc-full-active { max-width: 100% !important; }
     </button>
   </div>
   <div class="tf-status"><span id="teamFullSyncStatus"></span> <span id="teamFullGlobalStatus"></span></div>
-  <div id="teamColumns"></div>
+  <div id="teamColumns" onscroll="updateTeamFade()"></div>
 </div>
 
 <!-- ═══════════════ VALIDATION OVERLAY ═══════════════ -->
@@ -1467,7 +1467,24 @@ function renderTeamColumns() {
   }
   var cont = document.getElementById('teamColumns');
   if (cont) cont.innerHTML = html || '<div style="padding:20px;">Aucun collaborateur.</div>';
+  updateTeamFade();
 }
+
+// Fondu dynamique sur les bords horizontaux : on n'estompe un côté que s'il
+// reste des colonnes cachées de ce côté (sinon la 1re/derniere colonne
+// semblerait coupée alors qu'elle est entière).
+function updateTeamFade() {
+  var el = document.getElementById('teamColumns');
+  if (!el) return;
+  var fadeLeft  = el.scrollLeft > 2;
+  var fadeRight = (el.scrollLeft + el.clientWidth) < (el.scrollWidth - 2);
+  var l = fadeLeft  ? 'transparent 0, #000 28px' : '#000 0';
+  var r = fadeRight ? '#000 calc(100% - 28px), transparent 100%' : '#000 100%';
+  var g = 'linear-gradient(to right, ' + l + ', ' + r + ')';
+  el.style.webkitMaskImage = g;
+  el.style.maskImage = g;
+}
+try { window.addEventListener('resize', updateTeamFade); } catch(e) {}
 
 function _colCheckedDates(collabId) {
   var cbs = document.querySelectorAll('.tf-col-body .day-cb-wrap.checked:not(.disabled)[data-collab="' + collabId + '"]');
