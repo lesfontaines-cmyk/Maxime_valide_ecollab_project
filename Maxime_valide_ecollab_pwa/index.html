@@ -962,11 +962,12 @@ body.pc-full-active { max-width: 100% !important; }
 #teamColumns { display:flex; gap:12px; overflow:auto; max-height:calc(100vh - 118px); padding-bottom:12px; align-items:flex-start; justify-content:safe center; }
 #teamColumns .tf-col { flex:0 0 300px; border:1px solid #e5ddd0; border-radius:10px; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.05); }
 #teamColumns .tf-col-head { padding:10px; border-bottom:1px solid #eee; position:sticky; top:0; z-index:2; background:#fff; border-radius:10px 10px 0 0; }
-#teamColumns .tf-col-name { font-weight:600; font-size:14px; }
-#teamColumns .tf-col-sub { font-size:11px; color:#888; margin:2px 0 6px; }
+#teamColumns .tf-col-name { font-family:var(--serif); font-size:18px; color:var(--gold); letter-spacing:1px; text-align:center; }
+#teamColumns .tf-col-sub { font-size:11px; color:#888; margin:3px 0 8px; text-align:center; }
 #teamColumns .tf-col-valider { width:100%; padding:6px; background:#4a9a4a; color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:13px; }
 #teamColumns .tf-col-valider:disabled { background:#cfcfcf; cursor:default; }
-#teamColumns .tf-col-selall { display:block; margin-top:6px; font-size:12px; color:#5a4a2a; cursor:pointer; }
+#teamColumns .tf-col-selall { display:flex; align-items:center; gap:5px; margin-top:6px; font-size:12px; color:#5a4a2a; cursor:pointer; }
+#teamColumns .tf-col-selall input { margin:0; flex:0 0 auto; }
 #teamColumns .tf-col-status { font-size:11px; margin-top:4px; min-height:14px; }
 #teamColumns .tf-col-body .day-row { padding:5px 8px; }
 </style>
@@ -1442,7 +1443,9 @@ function renderTeamColumns() {
     html += '<div class="tf-col-sub">' + (days ? (nbVal + ' validés · ' + nbPend + ' à valider') : 'non synchronisé') + '</div>';
     html += '<button class="tf-col-valider" data-collab="' + c.id + '" onclick="validateColumn(\'' + c.id + '\')" disabled>Valider (0)</button>';
     if (nbPend > 0) {
-      html += '<label class="tf-col-selall"><input type="checkbox" onchange="toggleColSelectAll(\'' + c.id + '\', this.checked)" style="vertical-align:-1px;margin-right:4px;"> Tout cocher (' + nbPend + ')</label>';
+      html += '<label class="tf-col-selall"><input type="checkbox" onchange="toggleColSelectAll(\'' + c.id + '\', this.checked)"><span>Tout cocher (' + nbPend + ')</span></label>';
+    } else {
+      html += '<label class="tf-col-selall" style="visibility:hidden;" aria-hidden="true"><input type="checkbox" disabled tabindex="-1"><span>Tout cocher</span></label>';
     }
     html += '<div class="tf-col-status" id="tfstatus-' + c.id + '"></div>';
     html += '</div>';
