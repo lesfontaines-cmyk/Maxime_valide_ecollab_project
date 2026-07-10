@@ -1147,14 +1147,27 @@ def _model_to_days(model, mois, annee):
                 if lbl:
                     variable = lbl
                     break
-        # Jour férié chômé : afficher "Férié chômé" en pleine journée. Le modèle
-        # eCollab conserve souvent l'horaire théorique (7h) qu'on ne veut pas montrer.
-        is_ferie_chome = bool(j.get('EstFerie')) and bool(j.get('FerieChome'))
-        if not variable and is_ferie_chome:
-            variable = 'Férié chômé'
+        # --- Jours fériés ---
+        note = None
+        if bool(j.get('EstFerie')):
+            # Chômé ? FerieChome peut être null → repli sur FerieChomeParDefaut.
+            ferie_chome = j.get('FerieChome')
+            if ferie_chome is None:
+                ferie_chome = j.get('FerieChomeParDefaut')
+            ferie_chome = bool(ferie_chome)
+            has_real_hours = total_min > 0 and any(not p.get('absence') for p in plages)
+            valide_salarie = bool(j.get('ValideeParSalarie'))
+            if (not ferie_chome) and has_real_hours and valide_salarie:
+                # Le salarié a déclaré ET validé des heures un jour férié : on garde
+                # l'affichage habituel des heures et on note simplement "Férié travaillé".
+                note = 'Férié travaillé'
+            elif not variable:
+                # Sinon (chômé, ou heures non validées) : pleine journée "Férié chômé".
+                variable = 'Férié chômé'
+
         # Journée entièrement en absence OU férié chômé : une seule bande "pleine
         # journée" (comme eCollab) au lieu des plages travaillées / du libellé répété.
-        if variable and (all_abs or is_ferie_chome) and day_start is not None:
+        if variable and (all_abs or variable == 'Férié chômé') and day_start is not None:
             plages = [{
                 'debut': min_to_hhmm(day_start),
                 'fin': min_to_hhmm(day_end),
@@ -1169,6 +1182,7 @@ def _model_to_days(model, mois, annee):
             'totalHeures': total_min,
             'variable': variable,
             'variables': variable,
+            'note': note,
             'taches': None,
         }
     return days

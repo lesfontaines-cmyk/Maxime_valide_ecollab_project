@@ -600,6 +600,7 @@
   }
   .badge-salarie { background: #e8f0ff; color: #2d5a8a; }
   .badge-entreprise { background: #e5f2e5; color: #2d6e2d; }
+  .day-note { display: inline-block; margin-left: 7px; font-family: var(--sans); font-size: 10px; letter-spacing: .5px; text-transform: uppercase; color: var(--gold); background: var(--cream2); padding: 1px 7px; border-radius: 8px; vertical-align: 2px; }
   .badge-attente { background: #fff5e0; color: #8a6520; }
 
   /* --- WEEK SEPARATOR --- */
@@ -1970,7 +1971,7 @@ function buildDaysHtml(days, mois, annee, opts) {
     html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>';
     html += '</div>';
     html += '<div class="day-info">';
-    html += '<div class="day-date">' + jourNom + ' ' + d + ' ' + moisNom + '</div>';
+    html += '<div class="day-date">' + jourNom + ' ' + d + ' ' + moisNom + (dayData.note ? ' <span class="day-note">' + escHtml(dayData.note) + '</span>' : '') + '</div>';
     if (plagesBars) html += plagesBars;
     html += '<div class="day-plages">' + escHtml(plagesText) + '</div>';
     html += '</div>';
