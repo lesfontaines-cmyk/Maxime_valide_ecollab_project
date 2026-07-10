@@ -495,9 +495,9 @@
   .day-row.conge { background: #fff9e6; border-color: #e6d590; }
   .day-row.no-work { opacity: .5; }
   .day-row.weekend { background: var(--cream2); opacity: .6; }
-  /* Jours « a valider » (valides salarie, en attente entreprise) : lisere ambre + case mise en avant */
-  .day-row.to-validate { box-shadow: inset 3px 0 0 #cf9526; }
-  .day-row.to-validate .day-cb-wrap:not(.checked) { border-color: #cf9526; background: #fff8ea; }
+  /* Jours « a valider » (valides salarie, en attente entreprise) : lisere dore + case mise en avant */
+  .day-row.to-validate { box-shadow: inset 3px 0 0 var(--gold-lt); }
+  .day-row.to-validate .day-cb-wrap:not(.checked) { border-color: var(--gold-lt); background: var(--cream); }
 
   .day-cb-wrap {
     flex-shrink: 0;
@@ -864,7 +864,7 @@
   </div>
 
   <div style="text-align:center;margin:2px 0 10px;">
-    <button onclick="openTeamFull()" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;font-size:13px;border:1px solid #c9b487;background:#faf6ee;color:#5a4a2a;border-radius:20px;cursor:pointer;">
+    <button onclick="openTeamFull()" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;font-size:12px;letter-spacing:1px;text-transform:uppercase;border:1px solid var(--border);background:var(--cream);color:var(--gold);border-radius:20px;cursor:pointer;">
       🖥️ Vue de toute l'équipe
     </button>
   </div>
@@ -910,7 +910,7 @@
   <div class="valid-last-sync" id="validLastSync"></div>
 
   <div style="text-align:center;margin:8px 0 2px;">
-    <button id="resyncBtn" onclick="resyncCollab()" style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;font-size:13px;border:1px solid #c9b487;background:#faf6ee;color:#5a4a2a;border-radius:20px;cursor:pointer;">
+    <button id="resyncBtn" onclick="resyncCollab()" style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;font-size:12px;letter-spacing:1px;text-transform:uppercase;border:1px solid var(--border);background:var(--cream);color:var(--gold);border-radius:20px;cursor:pointer;">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
       Resynchroniser
     </button>
@@ -952,27 +952,31 @@
 <!-- ═══════════════ TEAM FULL (PC) SCREEN ═══════════════ -->
 <style>
 body.pc-full-active { max-width: 100% !important; }
-#teamFullScreen { padding: 12px; }
-#teamFullScreen .tf-bar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
-#teamFullScreen .tf-title { font-size:16px; font-weight:600; margin-right:auto; }
-#teamFullScreen .tf-btn { padding:7px 12px; border:1px solid #c9b487; background:#faf6ee; color:#5a4a2a; border-radius:8px; cursor:pointer; font-size:13px; }
-#teamFullScreen .tf-btn.primary { background:#4a9a4a; color:#fff; border-color:#4a9a4a; }
+#teamFullScreen { padding: 16px; }
+#teamFullScreen .tf-bar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+#teamFullScreen .tf-title { font-family:var(--serif); font-size:20px; font-weight:300; letter-spacing:3px; text-transform:uppercase; color:var(--mid); margin-right:auto; }
+#teamFullScreen .tf-btn { padding:8px 14px; border:1px solid var(--border); background:var(--cream); color:var(--gold); border-radius:4px; cursor:pointer; font-family:var(--sans); font-size:12px; letter-spacing:1px; text-transform:uppercase; transition:all .2s; }
+#teamFullScreen .tf-btn:hover { border-color:var(--gold); }
+#teamFullScreen .tf-btn.primary { background:var(--green); color:var(--white); border-color:var(--green); }
+#teamFullScreen .tf-btn.primary:hover { background:#4a7f4a; border-color:#4a7f4a; }
 #teamFullScreen .tf-round { width:38px; height:38px; border-radius:50%; border:1px solid var(--border); background:var(--white); color:var(--light); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; font-size:15px; transition:all .2s; flex:0 0 auto; padding:0; }
 #teamFullScreen .tf-round:hover { border-color:var(--gold); color:var(--gold); }
 #teamFullScreen .tf-round.syncing { animation:spin 1.2s linear infinite; border-color:var(--gold); color:var(--gold); }
-#teamFullScreen .tf-month { display:inline-flex; align-items:center; gap:8px; font-size:14px; }
-#teamFullScreen .tf-month button { border:1px solid #ddd; background:#fff; border-radius:6px; cursor:pointer; padding:2px 8px; }
-#teamFullScreen .tf-status { font-size:12px; color:#888; }
-#teamColumns { display:flex; gap:12px; overflow:auto; max-height:calc(100vh - 118px); padding-bottom:12px; align-items:flex-start; justify-content:safe center; }
-#teamColumns .tf-col { flex:0 0 300px; border:1px solid #e5ddd0; border-radius:10px; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.05); }
-#teamColumns .tf-col-head { padding:10px; border-bottom:1px solid #eee; position:sticky; top:0; z-index:2; background:#fff; border-radius:10px 10px 0 0; }
+#teamFullScreen .tf-month { display:inline-flex; align-items:center; gap:8px; font-size:13px; letter-spacing:1px; text-transform:uppercase; color:var(--mid); }
+#teamFullScreen .tf-month button { border:1px solid var(--border); background:var(--white); color:var(--gold); border-radius:4px; cursor:pointer; padding:2px 9px; transition:all .2s; }
+#teamFullScreen .tf-month button:hover { border-color:var(--gold); }
+#teamFullScreen .tf-status { font-size:12px; color:var(--light); }
+#teamColumns { display:flex; gap:12px; overflow:auto; max-height:calc(100vh - 122px); padding-bottom:12px; align-items:flex-start; justify-content:safe center; }
+#teamColumns .tf-col { flex:0 0 300px; border:1px solid var(--border); border-radius:8px; background:var(--white); box-shadow:0 1px 3px rgba(20,16,8,.06); }
+#teamColumns .tf-col-head { padding:12px 10px; border-bottom:1px solid var(--cream2); position:sticky; top:0; z-index:2; background:var(--white); border-radius:8px 8px 0 0; }
 #teamColumns .tf-col-name { font-family:var(--serif); font-size:18px; color:var(--gold); letter-spacing:1px; text-align:center; }
-#teamColumns .tf-col-sub { font-size:11px; color:#888; margin:3px 0 8px; text-align:center; }
-#teamColumns .tf-col-valider { width:100%; padding:6px; background:#4a9a4a; color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:13px; }
-#teamColumns .tf-col-valider:disabled { background:#cfcfcf; cursor:default; }
-#teamColumns .tf-col-selall { display:flex; align-items:center; gap:5px; margin-top:6px; font-size:12px; color:#5a4a2a; cursor:pointer; }
+#teamColumns .tf-col-sub { font-size:11px; letter-spacing:.5px; color:var(--light); margin:4px 0 9px; text-align:center; }
+#teamColumns .tf-col-valider { width:100%; padding:9px; background:var(--green); color:var(--white); border:none; border-radius:4px; cursor:pointer; font-family:var(--sans); font-size:12px; letter-spacing:1px; text-transform:uppercase; transition:all .2s; }
+#teamColumns .tf-col-valider:hover:not(:disabled) { background:#4a7f4a; }
+#teamColumns .tf-col-valider:disabled { opacity:.4; cursor:not-allowed; }
+#teamColumns .tf-col-selall { display:flex; align-items:center; gap:6px; margin-top:8px; font-size:12px; color:var(--gold); cursor:pointer; }
 #teamColumns .tf-col-selall input { margin:0; flex:0 0 auto; }
-#teamColumns .tf-col-status { font-size:11px; margin-top:4px; min-height:14px; }
+#teamColumns .tf-col-status { font-size:11px; margin-top:5px; min-height:14px; color:var(--light); }
 #teamColumns .tf-col-body .day-row { padding:5px 8px; }
 </style>
 <div id="teamFullScreen" class="app-screen">
