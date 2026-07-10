@@ -1147,17 +1147,20 @@ def _model_to_days(model, mois, annee):
                 if lbl:
                     variable = lbl
                     break
-        # Journée entièrement en absence : présenter une seule bande "pleine journée"
-        # (comme eCollab) au lieu de répéter le libellé sur chaque plage.
-        if variable and all_abs and len(plages) > 1 and day_start is not None:
+        # Jour férié chômé : afficher "Férié chômé" en pleine journée. Le modèle
+        # eCollab conserve souvent l'horaire théorique (7h) qu'on ne veut pas montrer.
+        is_ferie_chome = bool(j.get('EstFerie')) and bool(j.get('FerieChome'))
+        if not variable and is_ferie_chome:
+            variable = 'Férié chômé'
+        # Journée entièrement en absence OU férié chômé : une seule bande "pleine
+        # journée" (comme eCollab) au lieu des plages travaillées / du libellé répété.
+        if variable and (all_abs or is_ferie_chome) and day_start is not None:
             plages = [{
                 'debut': min_to_hhmm(day_start),
                 'fin': min_to_hhmm(day_end),
                 'tache': variable,
                 'absence': True,
             }]
-        if not variable and j.get('EstFerie') and j.get('FerieChome'):
-            variable = 'Férié chômé'
         days[date_key] = {
             'plages': plages,
             'travaille': bool(j.get('EstTravaille')),
