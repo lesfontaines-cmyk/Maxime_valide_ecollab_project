@@ -976,7 +976,7 @@ body.pc-full-active { max-width: 100% !important; }
 #teamColumns .tf-col-body { border:1px solid var(--border); border-top:none; border-radius:0 0 8px 8px; }
 /* Fondu sous l'en-tête collant : les lignes se dissolvent au lieu d'etre coupees
    net quand elles glissent sous l'en-tête. Visible seulement une fois scrolle. */
-#teamColumns .tf-col-head::after { content:''; position:absolute; left:0; right:0; top:100%; height:24px; background:linear-gradient(to bottom, var(--white), rgba(255,255,255,0)); pointer-events:none; opacity:0; transition:opacity .15s ease; }
+#teamColumns .tf-col-head::after { content:''; position:absolute; left:0; right:0; top:100%; height:13px; background:linear-gradient(to bottom, var(--white), rgba(255,255,255,0)); pointer-events:none; opacity:0; transition:opacity .15s ease; }
 #teamColumns.is-scrolled .tf-col-head::after { opacity:1; }
 #teamColumns .tf-col-name { font-family:var(--serif); font-size:18px; color:var(--gold); letter-spacing:1px; text-align:center; }
 #teamColumns .tf-col-sub { font-size:11px; letter-spacing:.5px; color:var(--light); margin:4px 0 9px; text-align:center; }
@@ -1487,8 +1487,8 @@ function updateTeamFade() {
   el.classList.toggle('is-scrolled', el.scrollTop > 4);
   var fadeLeft  = el.scrollLeft > 2;
   var fadeRight = (el.scrollLeft + el.clientWidth) < (el.scrollWidth - 2);
-  var l = fadeLeft  ? 'transparent 0, #000 28px' : '#000 0';
-  var r = fadeRight ? '#000 calc(100% - 28px), transparent 100%' : '#000 100%';
+  var l = fadeLeft  ? 'transparent 0, #000 15px' : '#000 0';
+  var r = fadeRight ? '#000 calc(100% - 15px), transparent 100%' : '#000 100%';
   var g = 'linear-gradient(to right, ' + l + ', ' + r + ')';
   el.style.webkitMaskImage = g;
   el.style.maskImage = g;
