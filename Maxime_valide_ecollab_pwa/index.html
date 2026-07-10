@@ -488,12 +488,16 @@
     transition: border-color .2s;
   }
   .day-row:hover { border-color: var(--gold-lt); }
-  .day-row.exact-hours { background: #e8f5e9; border-color: #a5d6a7; }
+  .day-row.validated { background: #e8f5e9; border-color: #a5d6a7; }
+  .day-row.exact-hours { background: #faf8f3; border-color: #e6ddcd; }
   .day-row.over-hours { background: #e3f0fc; border-color: #a8c8e8; }
   .day-row.under-hours { background: #fce4e4; border-color: #e8a8a8; }
   .day-row.conge { background: #fff9e6; border-color: #e6d590; }
   .day-row.no-work { opacity: .5; }
   .day-row.weekend { background: var(--cream2); opacity: .6; }
+  /* Jours « a valider » (valides salarie, en attente entreprise) : lisere ambre + case mise en avant */
+  .day-row.to-validate { box-shadow: inset 3px 0 0 #cf9526; }
+  .day-row.to-validate .day-cb-wrap:not(.checked) { border-color: #cf9526; background: #fff8ea; }
 
   .day-cb-wrap {
     flex-shrink: 0;
@@ -1860,12 +1864,14 @@ function buildDaysHtml(days, mois, annee, opts) {
     if (isWeekend && !hasTravaille) rowClass += ' weekend';
     else if (isConge) rowClass += ' conge';
     else if (!hasTravaille && !hasPlages) rowClass += ' no-work';
-    else if (isValideSalarie && dayData.totalHeures && dayData.totalHeures === 420) rowClass += ' exact-hours';
+    else if (isValideEntreprise) rowClass += ' validated';
     else if (isValideSalarie && dayData.totalHeures && dayData.totalHeures > 420) rowClass += ' over-hours';
     else if (isValideSalarie && dayData.totalHeures && dayData.totalHeures < 420 && dayData.travaille) rowClass += ' under-hours';
+    else if (isValideSalarie && dayData.totalHeures && dayData.totalHeures === 420) rowClass += ' exact-hours';
 
     var canCheck = isValideSalarie && !isValideEntreprise;
     var isChecked = isValideEntreprise;
+    if (canCheck) rowClass += ' to-validate';
 
     var plagesText = '';
     var plagesBars = '';
