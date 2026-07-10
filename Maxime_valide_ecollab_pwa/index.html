@@ -967,10 +967,11 @@ body.pc-full-active { max-width: 100% !important; }
 #teamFullScreen .tf-month button:hover { border-color:var(--gold); }
 #teamFullScreen .tf-status { font-size:12px; color:var(--light); }
 #teamColumns { display:flex; gap:12px; overflow:auto; max-height:calc(100vh - 122px); padding-bottom:12px; align-items:flex-start; justify-content:safe center; }
-#teamColumns .tf-col { flex:0 0 300px; border-radius:8px; background:var(--white); box-shadow:0 1px 3px rgba(20,16,8,.06); }
-/* Le cadre est porté par l'en-tête collant + le corps (et non par .tf-col) : ainsi
-   le haut de la colonne reste bien bordé/arrondi meme apres avoir scrolle. */
-#teamColumns .tf-col-head { padding:12px 10px; position:sticky; top:0; z-index:2; background:var(--white); border:1px solid var(--border); border-bottom:1px solid var(--cream2); border-radius:8px 8px 0 0; }
+#teamColumns .tf-col { flex:0 0 300px; border-radius:0 0 8px 8px; background:var(--white); box-shadow:0 1px 3px rgba(20,16,8,.06); }
+/* Le cadre est porté par l'en-tête collant + le corps (et non par .tf-col). Coins
+   du HAUT droits : l'en-tête colle au bord du conteneur qui rogne, un arrondi y
+   serait tronqué (encoches). Bas arrondi conserve. */
+#teamColumns .tf-col-head { padding:12px 10px; position:sticky; top:0; z-index:2; background:var(--white); border:1px solid var(--border); border-bottom:1px solid var(--cream2); border-radius:0; }
 #teamColumns .tf-col-body { border:1px solid var(--border); border-top:none; border-radius:0 0 8px 8px; }
 /* Fondu sous l'en-tête collant : les lignes se dissolvent au lieu d'etre coupees
    net quand elles glissent sous l'en-tête. Visible seulement une fois scrolle. */
