@@ -947,6 +947,7 @@
 
 <!-- ═══════════════ TEAM FULL (PC) SCREEN ═══════════════ -->
 <style>
+body.pc-full-active { max-width: 100% !important; }
 #teamFullScreen { padding: 12px; }
 #teamFullScreen .tf-bar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
 #teamFullScreen .tf-title { font-size:16px; font-weight:600; margin-right:auto; }
@@ -1154,6 +1155,7 @@ function showScreen(id) {
   document.getElementById('validScreen').classList.remove('active');
   var tfScr = document.getElementById('teamFullScreen');
   if (tfScr) tfScr.classList.remove('active');
+  document.body.classList.toggle('pc-full-active', id === 'teamFull');
 
   if (id === 'login') {
     document.getElementById('loginScreen').classList.add('show');
@@ -1462,7 +1464,7 @@ function renderTeamColumns() {
     html += '<div class="tf-col">';
     html += '<div class="tf-col-head">';
     html += '<div class="tf-col-name">' + escHtml(name) + '</div>';
-    html += '<div class="tf-col-sub">' + (days ? (nbVal + ' validés · ' + nbPend + ' en attente') : 'non synchronisé') + '</div>';
+    html += '<div class="tf-col-sub">' + (days ? (nbVal + ' validés · ' + nbPend + ' à valider') : 'non synchronisé') + '</div>';
     html += '<button class="tf-col-valider" data-collab="' + c.id + '" onclick="validateColumn(\'' + c.id + '\')"' + (nbPend === 0 ? ' disabled' : '') + '>Valider (' + nbPend + ')</button>';
     html += '<div class="tf-col-status" id="tfstatus-' + c.id + '"></div>';
     html += '</div>';
