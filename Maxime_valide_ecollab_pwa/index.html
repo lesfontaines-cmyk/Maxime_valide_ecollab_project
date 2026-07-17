@@ -783,6 +783,19 @@
   }
   .overlay-btn-ok:hover { background: var(--mid); }
 
+  /* Team validation result overlay */
+  @keyframes tfpop { 0%{transform:scale(.5);opacity:0} 60%{transform:scale(1.1)} 100%{transform:scale(1);opacity:1} }
+  .tfv-spinner { width:48px; height:48px; margin:2px auto 18px; border:4px solid var(--cream2); border-top-color:var(--gold); border-radius:50%; animation:spin .9s linear infinite; }
+  .tfv-icon { width:54px; height:54px; margin:0 auto 16px; border-radius:50%; display:none; align-items:center; justify-content:center; font-size:30px; font-weight:700; color:#fff; animation:tfpop .35s ease; }
+  .tfv-icon.ok { background: var(--green); }
+  .tfv-icon.err { background: var(--red); }
+  .tfv-icon.warn { background: #b8791f; }
+  .tfv-detail { text-align:left; font-size:12.5px; color:var(--mid); margin:0 0 20px; max-height:190px; overflow:auto; }
+  .tfv-detail .tfv-row { padding:6px 2px; border-top:1px solid var(--cream2); display:flex; gap:7px; align-items:flex-start; }
+  .tfv-detail .tfv-row:first-child { border-top:none; }
+  .tfv-detail .tfv-ok { color: var(--green); font-weight:700; }
+  .tfv-detail .tfv-ko { color: var(--red); font-weight:700; }
+
   /* --- RESPONSIVE --- */
   @media (max-width: 400px) {
     .header { padding: 60px 16px 16px; }
@@ -1022,6 +1035,20 @@ body.pc-full-active { max-width: 100% !important; }
     <div class="overlay-msg" id="overlayMsg"></div>
     <div class="overlay-actions" id="overlayActions">
       <button class="overlay-btn overlay-btn-cancel" id="overlayCancel" onclick="cancelValidation()">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ TEAM VALIDATION RESULT OVERLAY ═══════════════ -->
+<div class="overlay" id="tfValidOverlay">
+  <div class="overlay-box">
+    <div class="tfv-spinner" id="tfvSpinner"></div>
+    <div class="tfv-icon" id="tfvIcon"></div>
+    <div class="overlay-title" id="tfvTitle">Validation en cours…</div>
+    <div class="overlay-msg" id="tfvMsg"></div>
+    <div class="tfv-detail" id="tfvDetail"></div>
+    <div class="overlay-actions" id="tfvActions" style="display:none;">
+      <button class="overlay-btn overlay-btn-ok" onclick="closeTfValid()">Fermer</button>
     </div>
   </div>
 </div>
@@ -1511,59 +1538,124 @@ function _applyValidatedToCache(collabId, dates) {
   }
 }
 
+// ─── Overlay de résultat de validation (équipe) ─────────────────────────────
+function openTfValid() {
+  document.getElementById('tfvSpinner').style.display = 'block';
+  var ic = document.getElementById('tfvIcon'); ic.style.display = 'none'; ic.className = 'tfv-icon'; ic.textContent = '';
+  document.getElementById('tfvTitle').textContent = 'Validation en cours…';
+  document.getElementById('tfvMsg').textContent = '';
+  document.getElementById('tfvDetail').innerHTML = '';
+  document.getElementById('tfvActions').style.display = 'none';
+  document.getElementById('tfValidOverlay').classList.add('visible');
+}
+function progressTfValid(msg) { var e = document.getElementById('tfvMsg'); if (e) e.textContent = msg; }
+function closeTfValid() { document.getElementById('tfValidOverlay').classList.remove('visible'); }
+function finishTfValid(res) {
+  document.getElementById('tfvSpinner').style.display = 'none';
+  var ic = document.getElementById('tfvIcon');
+  var anyErr = res.rows.some(function(r){ return !r.ok; });
+  var anyOk = res.okDays > 0;
+  ic.style.display = 'flex';
+  if (anyErr && !anyOk) { ic.className = 'tfv-icon err'; ic.textContent = '✕'; document.getElementById('tfvTitle').textContent = 'Échec de la validation'; }
+  else if (anyErr) { ic.className = 'tfv-icon warn'; ic.textContent = '!'; document.getElementById('tfvTitle').textContent = 'Validation partielle'; }
+  else { ic.className = 'tfv-icon ok'; ic.textContent = '✓'; document.getElementById('tfvTitle').textContent = 'Validation terminée'; }
+  document.getElementById('tfvMsg').textContent = res.okDays + ' jour(s) validé(s)' + (res.okCollabs ? ' · ' + res.okCollabs + ' collaborateur(s)' : '');
+  var html = '';
+  res.rows.forEach(function(r){
+    html += '<div class="tfv-row"><span class="' + (r.ok ? 'tfv-ok' : 'tfv-ko') + '">' + (r.ok ? '✓' : '✕') + '</span>' +
+            '<span><strong>' + escHtml(r.name) + '</strong> — ' + escHtml(r.ok ? (r.count + ' jour(s) validé(s)') : r.reason) + '</span></div>';
+  });
+  document.getElementById('tfvDetail').innerHTML = html;
+  document.getElementById('tfvActions').style.display = 'flex';
+}
+
+// Re-coche des jours après un échec, pour réessayer sans tout re-cocher.
+function _recheckDates(collabId, dates) {
+  for (var i = 0; i < dates.length; i++) {
+    var cb = document.querySelector('.tf-col-body .day-cb-wrap:not(.disabled)[data-collab="' + collabId + '"][data-date="' + dates[i] + '"]');
+    if (cb) cb.classList.add('checked');
+  }
+  updateColValiderBtn(collabId);
+}
+
+function _validerOne(collabId, dates) {
+  return fetch(CFG.server + '/valider-direct', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: CFG.email, password: CFG.password, url: CFG.url, salarieId: collabId, dates: dates, mois: CURRENT_MOIS, annee: CURRENT_ANNEE })
+  }).then(function(r){ return r.json(); });
+}
+
 async function validateColumn(collabId) {
   var dates = _colCheckedDates(collabId);
   if (dates.length === 0) return;
-  var status = document.getElementById('tfstatus-' + collabId);
-  if (status) status.textContent = '⏳ Validation…';
-  var btn = document.querySelector('.tf-col-valider[data-collab="' + collabId + '"]');
-  if (btn) btn.disabled = true;
+  var c = visibleCollabsList().filter(function(x){ return String(x.id) === String(collabId); })[0];
+  var name = c ? (formatCollabName(c) || String(collabId)) : String(collabId);
+  var st = document.getElementById('tfstatus-' + collabId);
+  if (st) st.textContent = '⏳ Validation…';
+  openTfValid();
+  progressTfValid(name);
+  var res = { okDays: 0, okCollabs: 0, rows: [] };
   try {
-    var resp = await fetch(CFG.server + '/valider-direct', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: CFG.email, password: CFG.password, url: CFG.url, salarieId: collabId, dates: dates, mois: CURRENT_MOIS, annee: CURRENT_ANNEE })
-    });
-    var data = await resp.json();
+    var data = await _validerOne(collabId, dates);
     if (data && data.success) {
       _applyValidatedToCache(collabId, dates);
-      renderTeamColumns();
-      var st2 = document.getElementById('tfstatus-' + collabId);
-      if (st2) st2.textContent = '✅ ' + dates.length + ' validé(s)';
+      res.okDays = dates.length; res.okCollabs = 1;
+      res.rows.push({ name: name, ok: true, count: dates.length });
+      renderTeamColumns();  // succès → on rafraîchit (jours passent en "validé")
     } else {
-      if (status) status.textContent = '❌ ' + ((data && data.error) || 'Erreur');
-      if (btn) btn.disabled = false;
+      res.rows.push({ name: name, ok: false, reason: (data && data.error) || 'Erreur inconnue' });
+      // échec → on NE re-rend PAS : les cases restent cochées pour réessayer
     }
   } catch (e) {
-    if (status) status.textContent = '❌ Erreur connexion';
-    if (btn) btn.disabled = false;
+    res.rows.push({ name: name, ok: false, reason: 'Erreur de connexion au serveur' });
   }
+  finishTfValid(res);
 }
 
 async function validateAllTeam() {
   var visible = visibleCollabsList();
-  var jobs = [];
+  var todo = [];
   visible.forEach(function(c){
     var dates = _colCheckedDates(c.id);
-    if (dates.length === 0) return;
-    var status = document.getElementById('tfstatus-' + c.id);
-    if (status) status.textContent = '⏳ Validation…';
-    jobs.push(
-      fetch(CFG.server + '/valider-direct', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: CFG.email, password: CFG.password, url: CFG.url, salarieId: c.id, dates: dates, mois: CURRENT_MOIS, annee: CURRENT_ANNEE })
-      }).then(function(r){ return r.json(); }).then(function(data){
-        var st = document.getElementById('tfstatus-' + c.id);
-        if (data && data.success) { _applyValidatedToCache(c.id, dates); if (st) st.textContent = '✅ ' + dates.length; }
-        else if (st) st.textContent = '❌ ' + ((data && data.error) || 'Erreur');
-      }).catch(function(){ var st = document.getElementById('tfstatus-' + c.id); if (st) st.textContent = '❌ Erreur'; })
-    );
+    if (dates.length) todo.push({ id: c.id, dates: dates, name: formatCollabName(c) || String(c.id) });
   });
-  var gstatus = document.getElementById('teamFullGlobalStatus');
-  if (jobs.length === 0) { if (gstatus) { gstatus.textContent = 'Rien à valider.'; setTimeout(function(){ gstatus.textContent=''; }, 3000);} return; }
-  if (gstatus) gstatus.textContent = 'Validation en cours…';
-  await Promise.all(jobs);
+  if (todo.length === 0) { showToast('info', 'Rien à valider — coche des jours d\'abord (ou « Tout cocher »).'); return; }
+  openTfValid();
+  // Rafraîchit la session eCollab avant de sauvegarder (évite les échecs de session périmée).
+  progressTfValid('Connexion à eCollaboratrice…');
+  try {
+    await fetch(CFG.server + '/ensure-session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: CFG.email, password: CFG.password, url: CFG.url }) });
+  } catch (e) {}
+  var res = { okDays: 0, okCollabs: 0, rows: [] };
+  var failed = [];
+  // Séquentiel : eCollab sérialise les sauvegardes ; les envoyer en parallèle les fait échouer.
+  for (var i = 0; i < todo.length; i++) {
+    var t = todo[i];
+    progressTfValid('Collaborateur ' + (i + 1) + '/' + todo.length + ' — ' + t.name);
+    var st = document.getElementById('tfstatus-' + t.id);
+    if (st) st.textContent = '⏳ Validation…';
+    try {
+      var data = await _validerOne(t.id, t.dates);
+      if (data && data.success) {
+        _applyValidatedToCache(t.id, t.dates);
+        res.okDays += t.dates.length; res.okCollabs += 1;
+        res.rows.push({ name: t.name, ok: true, count: t.dates.length });
+        if (st) st.textContent = '✅ ' + t.dates.length;
+      } else {
+        res.rows.push({ name: t.name, ok: false, reason: (data && data.error) || 'Erreur inconnue' });
+        failed.push(t);
+        if (st) st.textContent = '❌';
+      }
+    } catch (e) {
+      res.rows.push({ name: t.name, ok: false, reason: 'Erreur de connexion au serveur' });
+      failed.push(t);
+      if (st) st.textContent = '❌';
+    }
+  }
   renderTeamColumns();
-  if (gstatus) { gstatus.textContent = 'Terminé.'; setTimeout(function(){ gstatus.textContent = ''; }, 4000); }
+  // Conserver la sélection des collaborateurs en échec pour réessayer facilement.
+  failed.forEach(function(t){ _recheckDates(t.id, t.dates); });
+  finishTfValid(res);
 }
 
 async function syncTeamFull() {
