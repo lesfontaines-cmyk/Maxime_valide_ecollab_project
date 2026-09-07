@@ -300,6 +300,7 @@
     color: var(--light);
     letter-spacing: .3px;
   }
+  .collab-sync.warn { color: var(--red); }
   .sync-info {
     text-align: center;
     font-size: 12px;
@@ -900,6 +901,13 @@
   <div class="settings-info">Desactivez les collaborateurs que vous ne souhaitez pas voir dans la liste.</div>
   <div class="settings-list" id="settingsList"></div>
 
+  <div style="text-align:center;margin:18px 0 4px;">
+    <button id="reloadTeamBtn" onclick="reloadTeamFromSettings()" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;font-size:12px;letter-spacing:1px;text-transform:uppercase;border:1px solid var(--border);background:var(--cream);color:var(--gold);border-radius:20px;cursor:pointer;">
+      Recharger l'equipe
+    </button>
+    <div class="settings-info" style="margin-top:8px;">A utiliser apres un changement de contrat : eCollab attribue un nouvel identifiant au collaborateur.</div>
+  </div>
+
   <div class="app-version-footer">
     <span id="appVersionLabel">v--</span> &mdash;
     <a href="#" id="forceUpdateLink" onclick="forceAppUpdate();return false;">Forcer la mise a jour</a>
@@ -994,6 +1002,7 @@ body.pc-full-active { max-width: 100% !important; }
 #teamColumns.is-scrolled .tf-col-head::after { opacity:1; }
 #teamColumns .tf-col-name { font-family:var(--serif); font-size:18px; color:var(--gold); letter-spacing:1px; text-align:center; }
 #teamColumns .tf-col-sub { font-size:11px; letter-spacing:.5px; color:var(--light); margin:4px 0 9px; text-align:center; }
+#teamColumns .tf-col-sub.warn { color:var(--red); }
 #teamColumns .tf-col-valider { width:100%; padding:9px; background:var(--green); color:var(--white); border:none; border-radius:4px; cursor:pointer; font-family:var(--sans); font-size:12px; letter-spacing:1px; text-transform:uppercase; transition:all .2s; }
 #teamColumns .tf-col-valider:hover:not(:disabled) { background:#4a7f4a; }
 #teamColumns .tf-col-valider:disabled { opacity:.4; cursor:not-allowed; }
@@ -1190,14 +1199,60 @@ function clearCfg() {
     localStorage.removeItem('vm_url');
     localStorage.removeItem('vm_server');
     localStorage.removeItem('vm_collabs');
+    localStorage.removeItem('vm_collabs_ts');
+    localStorage.removeItem('vm_sync_status');
   } catch(e) {}
 }
 
 function cacheCollabs(list) {
-  try { localStorage.setItem('vm_collabs', JSON.stringify(list)); } catch(e) {}
+  try {
+    localStorage.setItem('vm_collabs', JSON.stringify(list));
+    localStorage.setItem('vm_collabs_ts', String(Date.now()));
+  } catch(e) {}
 }
 function loadCachedCollabs() {
   try { return JSON.parse(localStorage.getItem('vm_collabs') || '[]'); } catch(e) { return []; }
+}
+// Age de la liste d'equipe en cache (ms). Infinity si jamais rechargee.
+function collabsCacheAge() {
+  try {
+    var ts = parseInt(localStorage.getItem('vm_collabs_ts') || '0', 10);
+    return ts ? (Date.now() - ts) : Infinity;
+  } catch(e) { return Infinity; }
+}
+
+// ─── ÉTAT DE SYNCHRO PAR COLLABORATEUR ──────────────────────────────────────
+// Une synchro qui echoue (ou qui ne ramene aucune journee) ne doit pas passer
+// inapercue : sans trace, l'app continue d'afficher les dernieres donnees
+// connues et le manager croit ses donnees a jour.
+
+var SYNC_STATUS = {}; // { collabId: {state:'ok'|'empty'|'error', error, mois, annee, ts} }
+
+function loadSyncStatus() {
+  try { SYNC_STATUS = JSON.parse(localStorage.getItem('vm_sync_status') || '{}'); } catch(e) { SYNC_STATUS = {}; }
+}
+function saveSyncStatus() {
+  try { localStorage.setItem('vm_sync_status', JSON.stringify(SYNC_STATUS)); } catch(e) {}
+}
+function setSyncStatus(collabId, state, mois, annee, error) {
+  SYNC_STATUS[String(collabId)] = {
+    state: state, mois: mois, annee: annee,
+    error: error || '', ts: new Date().toISOString()
+  };
+}
+// Renvoie l'etat en echec du collaborateur pour ce mois, sinon null.
+function syncProblem(collabId, mois, annee) {
+  var st = SYNC_STATUS[String(collabId)];
+  if (!st || st.state === 'ok') return null;
+  if (st.mois !== mois || st.annee !== annee) return null;
+  return st;
+}
+function syncProblemLabel(st) {
+  if (!st) return '';
+  // 'empty' : eCollab a répondu, mais sans aucune journée pour ce mois — le cas
+  // typique d'un idContrat qui ne correspond plus à un contrat actif.
+  return st.state === 'empty' ? '⚠ Aucune donnée sur ce mois'
+                              : '⚠ Synchro en échec';
 }
 
 // ─── SCREENS ────────────────────────────────────────────────────────────────
@@ -1286,6 +1341,124 @@ function doLogout() {
   showScreen('login');
 }
 
+// ─── LISTE D'ÉQUIPE : RECHARGEMENT ──────────────────────────────────────────
+// L'identifiant d'un collaborateur est son idContrat eCollab. Un changement de
+// contrat (avenant, CDD -> CDI, fin de contrat) attribue un NOUVEL idContrat :
+// les requetes envoyees avec l'ancien id ne ramenent plus aucune journee. La
+// liste mise en cache doit donc etre rechargee, sinon le collaborateur concerne
+// reste fige sur ses dernieres donnees connues.
+
+var COLLABS_MAX_AGE_MS  = 6 * 60 * 60 * 1000; // rafraichissement de routine
+var LIST_REFRESH_MIN_MS = 60 * 60 * 1000;     // anti-boucle de l'auto-reparation
+var _listRefreshAt = 0;
+var _listRefreshPromise = null;
+
+function collabIds(list) {
+  var out = [];
+  for (var i = 0; i < list.length; i++) out.push(String(list[i].id || list[i].fullName || i));
+  return out;
+}
+
+function normalizedCollabName(c) {
+  var full = ((c.prenom || '') + ' ' + (c.nom || '')).trim() || (c.fullName || '');
+  return full.toUpperCase().replace(/\s+/g, ' ').trim();
+}
+
+// Le rechargement est bride : /fetch-collaborateurs ouvre un Chrome cote serveur.
+function canRefreshCollabs() {
+  if (_listRefreshAt && (Date.now() - _listRefreshAt) < LIST_REFRESH_MIN_MS) return false;
+  return collabsCacheAge() > LIST_REFRESH_MIN_MS;
+}
+
+// Reporte les preferences liees aux ids disparus (contrat remplace) et nettoie
+// les caches devenus orphelins.
+function reconcileCollabs(oldList, newList) {
+  var newIds = collabIds(newList);
+  var hidden = getHiddenCollabs();
+  var hiddenChanged = false;
+
+  for (var i = 0; i < oldList.length; i++) {
+    var oldId = String(oldList[i].id || oldList[i].fullName || i);
+    if (newIds.indexOf(oldId) !== -1) continue;
+
+    // Cet id n'existe plus : retrouver le meme collaborateur sous son nouvel id.
+    var name = normalizedCollabName(oldList[i]);
+    var replacementId = null;
+    for (var j = 0; j < newList.length && name; j++) {
+      if (normalizedCollabName(newList[j]) === name) { replacementId = newIds[j]; break; }
+    }
+
+    // Le masquage (Parametres) suit le collaborateur, pas son contrat.
+    var hIdx = hidden.indexOf(oldId);
+    if (hIdx !== -1) {
+      hidden.splice(hIdx, 1);
+      if (replacementId && hidden.indexOf(replacementId) === -1) hidden.push(replacementId);
+      hiddenChanged = true;
+    }
+
+    // Donnees et etat de synchro rattaches a un contrat qui n'existe plus.
+    delete SYNC_CACHE[oldId];
+    delete SYNC_STATUS[oldId];
+  }
+
+  if (hiddenChanged) setHiddenCollabs(hidden);
+  try { localStorage.setItem('vm_sync_cache', JSON.stringify(SYNC_CACHE)); } catch(e) {}
+  saveSyncStatus();
+}
+
+// Recharge la liste depuis eCollab. Renvoie true si la composition a change.
+function refreshCollabsList() {
+  if (_listRefreshPromise) return _listRefreshPromise;
+  _listRefreshAt = Date.now();
+  var p = (async function() {
+    try {
+      var resp = await fetch(CFG.server + '/fetch-collaborateurs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: CFG.email, password: CFG.password, url: CFG.url })
+      });
+      var data = await resp.json();
+      if (!data || !data.success || !data.collaborateurs || !data.collaborateurs.length) return false;
+
+      var before = collabIds(COLLABS).join('|');
+      reconcileCollabs(COLLABS, data.collaborateurs);
+      COLLABS = data.collaborateurs;
+      cacheCollabs(COLLABS);
+      if (CURRENT_COLLAB) {
+        // Reaccrocher l'ecran ouvert au nouveau contrat du meme collaborateur.
+        var curName = normalizedCollabName(CURRENT_COLLAB);
+        for (var i = 0; i < COLLABS.length; i++) {
+          if (normalizedCollabName(COLLABS[i]) === curName) { CURRENT_COLLAB = COLLABS[i]; break; }
+        }
+      }
+      var changed = collabIds(COLLABS).join('|') !== before;
+      // Les cartes de l'equipe portent l'index du collaborateur dans COLLABS :
+      // il faut les redessiner des que la liste change.
+      if (changed) renderCollabs();
+      return changed;
+    } catch(e) {
+      return false;
+    } finally {
+      _listRefreshPromise = null;
+    }
+  })();
+  _listRefreshPromise = p;
+  return p;
+}
+
+// Collaborateurs visibles sans donnees fraiches pour ce mois.
+function collabsNeedingSync(mois, annee) {
+  var visible = visibleCollabsList();
+  var out = [];
+  for (var i = 0; i < visible.length; i++) {
+    var cached = SYNC_CACHE[visible[i].id];
+    var fresh = cached && cached.mois === mois && cached.annee === annee &&
+                cached.days && Object.keys(cached.days).length > 0;
+    if (!fresh) out.push(visible[i]);
+  }
+  return out;
+}
+
 // ─── TEAM SCREEN ────────────────────────────────────────────────────────────
 
 async function loadTeamScreen(forceReloadTeam) {
@@ -1298,6 +1471,9 @@ async function loadTeamScreen(forceReloadTeam) {
   if (cached.length > 0 && !forceReloadTeam) {
     COLLABS = cached;
     renderCollabs();
+    // Liste d'equipe agee : la recharger en tache de fond (les contrats ont pu
+    // changer), l'affichage et la synchro ne sont pas retardes pour autant.
+    if (collabsCacheAge() > COLLABS_MAX_AGE_MS) refreshCollabsList();
     // Passer directement à la synchro des données
     syncAllCollabs();
     return;
@@ -1314,6 +1490,8 @@ async function loadTeamScreen(forceReloadTeam) {
     var data = await resp.json();
 
     if (data.success && data.collaborateurs) {
+      _listRefreshAt = Date.now();
+      reconcileCollabs(COLLABS, data.collaborateurs);
       COLLABS = data.collaborateurs;
       cacheCollabs(COLLABS);
       renderCollabs();
@@ -1332,6 +1510,23 @@ async function loadTeamScreen(forceReloadTeam) {
   if (COLLABS.length > 0) {
     syncAllCollabs();
   }
+}
+
+// Parametres : rechargement manuel de l'equipe (remede a un changement de contrat).
+async function reloadTeamFromSettings() {
+  var btn = document.getElementById('reloadTeamBtn');
+  var label = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; btn.innerHTML = 'Rechargement…'; }
+  var changed = false;
+  try {
+    changed = await refreshCollabsList();
+  } finally {
+    if (btn) { btn.disabled = false; btn.style.opacity = ''; btn.innerHTML = label; }
+  }
+  renderSettings();
+  showToast(changed ? 'success' : 'info',
+            changed ? 'Liste de l\'equipe mise a jour.' : 'Liste de l\'equipe inchangee.');
+  if (changed) syncAllCollabs();
 }
 
 function getHiddenCollabs() {
@@ -1367,7 +1562,12 @@ function renderCollabs() {
     // Résumé synchro si disponible
     var syncInfo = '';
     var cached = SYNC_CACHE[c.id];
-    if (cached && cached.days) {
+    // Synchro en echec / sans donnees : le signaler plutot que d'afficher en
+    // silence le dernier resume connu (donnees potentiellement perimees).
+    var pb = syncProblem(c.id, new Date().getMonth() + 1, new Date().getFullYear());
+    if (pb) {
+      syncInfo = '<span class="collab-sync warn">' + escHtml(syncProblemLabel(pb)) + '</span>';
+    } else if (cached && cached.days) {
       var totalH = 0, nbValide = 0, nbJours = 0;
       for (var dk in cached.days) {
         var dd = cached.days[dk];
@@ -1482,11 +1682,13 @@ function renderTeamColumns() {
     var days = (cached && cached.mois === CURRENT_MOIS && cached.annee === CURRENT_ANNEE) ? cached.days : null;
     var nbPend = 0, nbVal = 0;
     if (days) { for (var dk in days) { var dd = days[dk]; if (dd.travaille) { if (dd.valideEntreprise) nbVal++; else if (dd.valideSalarie) nbPend++; } } }
+    var pb = syncProblem(c.id, CURRENT_MOIS, CURRENT_ANNEE);
     html += '<div class="tf-col">';
     html += '<div class="tf-col-cap"></div>';
     html += '<div class="tf-col-head">';
     html += '<div class="tf-col-name">' + escHtml(name) + '</div>';
-    html += '<div class="tf-col-sub">' + (days ? (nbVal + ' validés · ' + nbPend + ' à valider') : 'non synchronisé') + '</div>';
+    html += pb ? '<div class="tf-col-sub warn">' + escHtml(syncProblemLabel(pb)) + '</div>'
+               : '<div class="tf-col-sub">' + (days ? (nbVal + ' validés · ' + nbPend + ' à valider') : 'non synchronisé') + '</div>';
     html += '<button class="tf-col-valider" data-collab="' + c.id + '" onclick="validateColumn(\'' + c.id + '\')" disabled>Valider (0)</button>';
     if (nbPend > 0) {
       html += '<label class="tf-col-selall"><input type="checkbox" onchange="toggleColSelectAll(\'' + c.id + '\', this.checked)"><span>Tout cocher (' + nbPend + ')</span></label>';
@@ -1674,10 +1876,25 @@ async function syncTeamFull() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: CFG.email, password: CFG.password, url: CFG.url, salarieId: c.id, mois: CURRENT_MOIS, annee: CURRENT_ANNEE })
     }).then(function(r){ return r.json(); }).then(function(data){
-      if (data && data.success) { SYNC_CACHE[c.id] = { mois: CURRENT_MOIS, annee: CURRENT_ANNEE, days: data.days || {}, nomSalarie: data.nomSalarie || formatCollabName(c), timestamp: new Date().toISOString() }; }
-    }).catch(function(){}).then(function(){ done++; if (bar) bar.textContent = 'Synchronisation ' + done + '/' + total; });
+      applySyncResult(c, CURRENT_MOIS, CURRENT_ANNEE, data);
+    }).catch(function(){
+      setSyncStatus(c.id, 'error', CURRENT_MOIS, CURRENT_ANNEE, 'Connexion au serveur impossible');
+    }).then(function(){ done++; if (bar) bar.textContent = 'Synchronisation ' + done + '/' + total; });
   }));
-  try { localStorage.setItem('vm_sync_cache', JSON.stringify(SYNC_CACHE)); } catch(e) {}
+  persistSyncState();
+  renderTeamColumns();
+
+  // Collaborateur sans aucune donnée : son idContrat n'est probablement plus le
+  // bon (changement de contrat). On recharge la liste et on resynchronise.
+  var progress = function(i, n) {
+    if (bar) bar.textContent = 'Synchronisation ' + i + '/' + n;
+  };
+  if (problemCollabs(CURRENT_MOIS, CURRENT_ANNEE).length > 0) {
+    if (bar) bar.textContent = 'Mise à jour de la liste de l\'équipe…';
+    await healMissingCollabs(CURRENT_MOIS, CURRENT_ANNEE, progress);
+  }
+  await syncPendingCollabs(CURRENT_MOIS, CURRENT_ANNEE, progress);
+
   if (syncBtn) syncBtn.classList.remove('syncing');
   if (bar) bar.textContent = '';
   renderTeamColumns();
@@ -1701,14 +1918,101 @@ function escHtml(s) {
 
 var SYNC_CACHE = {}; // { collabId: { mois, annee, days, nomSalarie, timestamp } }
 
-async function syncAllCollabs() {
-  var hidden = getHiddenCollabs();
-  var visibles = [];
-  for (var i = 0; i < COLLABS.length; i++) {
-    var c = COLLABS[i];
-    var cid = String(c.id || c.fullName || i);
-    if (hidden.indexOf(cid) === -1) visibles.push(c);
+// Enregistre le résultat d'une synchro et renvoie true si des journées ont été
+// reçues. Un mois vide n'écrase pas les données connues : eCollab répond sans
+// aucune journée quand l'idContrat interrogé ne correspond plus à un contrat
+// actif sur ce mois (changement / fin de contrat). Le collaborateur est alors
+// signalé au lieu d'être silencieusement figé sur ses dernières données.
+function applySyncResult(c, mois, annee, data, fallbackName) {
+  if (data && data.success) {
+    var days = data.days || {};
+    if (Object.keys(days).length > 0) {
+      SYNC_CACHE[c.id] = {
+        mois: mois, annee: annee, days: days,
+        nomSalarie: data.nomSalarie || fallbackName || formatCollabName(c),
+        timestamp: new Date().toISOString()
+      };
+      setSyncStatus(c.id, 'ok', mois, annee);
+      return true;
+    }
+    setSyncStatus(c.id, 'empty', mois, annee);
+    return false;
   }
+  setSyncStatus(c.id, 'error', mois, annee, (data && data.error) || 'Erreur inconnue');
+  return false;
+}
+
+function persistSyncState() {
+  try { localStorage.setItem('vm_sync_cache', JSON.stringify(SYNC_CACHE)); } catch(e) {}
+  saveSyncStatus();
+}
+
+async function syncOneCollab(c, mois, annee) {
+  try {
+    var resp = await fetch(CFG.server + '/fetch-mois-direct', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: CFG.email, password: CFG.password, url: CFG.url,
+        salarieId: c.id, mois: mois, annee: annee
+      })
+    });
+    var data = await resp.json();
+    return applySyncResult(c, mois, annee, data);
+  } catch(e) {
+    console.error('Sync error', formatCollabName(c), e);
+    setSyncStatus(c.id, 'error', mois, annee, 'Connexion au serveur impossible');
+    return false;
+  }
+}
+
+// Collaborateurs visibles signalés en échec pour ce mois.
+function problemCollabs(mois, annee) {
+  var visible = visibleCollabsList();
+  var out = [];
+  for (var i = 0; i < visible.length; i++) {
+    if (syncProblem(visible[i].id, mois, annee)) out.push(visible[i]);
+  }
+  return out;
+}
+
+// Rattrapage : synchronise les collaborateurs visibles encore sans données pour
+// ce mois et jamais interrogés. Utile quand la liste d'équipe a été rechargée
+// pendant la synchro (nouveaux idContrat) ou qu'un collaborateur vient d'entrer
+// dans l'équipe. Ceux déjà signalés en échec sont laissés à l'auto-réparation.
+async function syncPendingCollabs(mois, annee, onProgress) {
+  var candidats = collabsNeedingSync(mois, annee);
+  var restants = [];
+  for (var i = 0; i < candidats.length; i++) {
+    if (!syncProblem(candidats[i].id, mois, annee)) restants.push(candidats[i]);
+  }
+  for (var k = 0; k < restants.length; k++) {
+    if (onProgress) onProgress(k + 1, restants.length, formatCollabName(restants[k]));
+    await syncOneCollab(restants[k], mois, annee);
+  }
+  if (restants.length > 0) persistSyncState();
+  return restants.length;
+}
+
+// Auto-réparation : un collaborateur qui ne renvoie plus rien a le plus souvent
+// changé de contrat, donc d'idContrat. On recharge la liste d'équipe depuis
+// eCollab puis on synchronise ce qui manque avec les nouveaux identifiants.
+// Renvoie true si la liste a changé.
+async function healMissingCollabs(mois, annee, onProgress) {
+  if (!canRefreshCollabs()) return false;
+  var changed = await refreshCollabsList();
+  if (!changed) return false;
+  var retry = collabsNeedingSync(mois, annee);
+  for (var i = 0; i < retry.length; i++) {
+    if (onProgress) onProgress(i + 1, retry.length, formatCollabName(retry[i]));
+    await syncOneCollab(retry[i], mois, annee);
+  }
+  persistSyncState();
+  return true;
+}
+
+async function syncAllCollabs() {
+  var visibles = visibleCollabsList();
   if (visibles.length === 0) return;
 
   var btn = document.getElementById('syncBtn');
@@ -1730,35 +2034,39 @@ async function syncAllCollabs() {
 
   // Etape 2 : Synchronisation de chaque collaborateur (API directe, rapide)
   for (var v = 0; v < visibles.length; v++) {
-    var c = visibles[v];
-    var name = formatCollabName(c);
-    showLoading('Synchronisation ' + (v + 1) + '/' + total + ' — ' + name);
-    try {
-      var resp = await fetch(CFG.server + '/fetch-mois-direct', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: CFG.email, password: CFG.password, url: CFG.url,
-          salarieId: c.id, mois: mois, annee: annee
-        })
-      });
-      var data = await resp.json();
-      if (data.success) {
-        SYNC_CACHE[c.id] = {
-          mois: mois, annee: annee,
-          days: data.days || {},
-          nomSalarie: data.nomSalarie || name,
-          timestamp: new Date().toISOString()
-        };
-        renderCollabs();
-      }
-    } catch(e) { console.error('Sync error', name, e); }
+    showLoading('Synchronisation ' + (v + 1) + '/' + total + ' — ' + formatCollabName(visibles[v]));
+    await syncOneCollab(visibles[v], mois, annee);
+    renderCollabs();
   }
+  persistSyncState();
 
-  try { localStorage.setItem('vm_sync_cache', JSON.stringify(SYNC_CACHE)); } catch(e) {}
+  // Etape 3 : si un collaborateur n'a rien renvoyé, recharger la liste d'équipe
+  // (son contrat a pu changer) puis resynchroniser avec le nouvel identifiant.
+  var progress = function(i, n, name) {
+    showLoading('Synchronisation ' + i + '/' + n + ' — ' + name);
+  };
+  if (problemCollabs(mois, annee).length > 0) {
+    showLoading('Mise à jour de la liste de l\'équipe...');
+    await healMissingCollabs(mois, annee, progress);
+  }
+  // La liste a pu être rechargée en tâche de fond pendant la synchro : compléter
+  // les collaborateurs qui n'ont pas encore été interrogés sous leur id à jour.
+  await syncPendingCollabs(mois, annee, progress);
+
   if (btn) btn.classList.remove('syncing');
   hideLoading();
   renderCollabs();
+
+  var pbs = problemCollabs(mois, annee);
+  if (pbs.length > 0) {
+    var names = [];
+    for (var p = 0; p < pbs.length && p < 3; p++) names.push(formatCollabName(pbs[p]));
+    showToast('error',
+      'Non synchronisé : ' + names.join(', ') +
+      (pbs.length > 3 ? ' (+' + (pbs.length - 3) + ')' : '') +
+      ' — vérifiez un changement de contrat dans eCollab.',
+      { id: 'sync-problems' });
+  }
 }
 
 function loadSyncCache() {
@@ -1857,9 +2165,12 @@ async function selectCollab(idx) {
   document.getElementById('validateResult').style.display = 'none';
   document.getElementById('monthLabel').textContent = MOIS_NOMS[CURRENT_MOIS] + ' ' + CURRENT_ANNEE;
 
-  // Afficher le cache immédiatement si disponible
+  // Afficher le cache immédiatement si disponible — sauf s'il est vide ou si la
+  // dernière synchro de ce collaborateur a échoué : dans ces cas on recharge.
   var cached = SYNC_CACHE[CURRENT_COLLAB.id];
-  if (cached && cached.mois === CURRENT_MOIS && cached.annee === CURRENT_ANNEE && cached.days) {
+  var hasCachedDays = cached && cached.days && Object.keys(cached.days).length > 0;
+  if (hasCachedDays && !syncProblem(CURRENT_COLLAB.id, CURRENT_MOIS, CURRENT_ANNEE) &&
+      cached.mois === CURRENT_MOIS && cached.annee === CURRENT_ANNEE) {
     MONTH_DATA = cached.days;
     if (cached.nomSalarie) document.getElementById('validCollabName').textContent = cached.nomSalarie;
     updateValidLastSync(cached.timestamp);
@@ -1913,28 +2224,42 @@ async function loadMonth() {
     });
     var data = await resp.json();
 
-    if (data.success) {
-      MONTH_DATA = data.days || {};
+    var recu = applySyncResult(CURRENT_COLLAB, CURRENT_MOIS, CURRENT_ANNEE, data);
+    persistSyncState();
+
+    if (recu) {
+      MONTH_DATA = SYNC_CACHE[CURRENT_COLLAB.id].days;
       if (data.nomSalarie) {
         document.getElementById('validCollabName').textContent = data.nomSalarie;
       }
-      // Sauvegarder en cache
-      var nowIso = new Date().toISOString();
-      SYNC_CACHE[CURRENT_COLLAB.id] = {
-        mois: CURRENT_MOIS,
-        annee: CURRENT_ANNEE,
-        days: MONTH_DATA,
-        nomSalarie: data.nomSalarie || '',
-        timestamp: nowIso
-      };
-      try { localStorage.setItem('vm_sync_cache', JSON.stringify(SYNC_CACHE)); } catch(e) {}
-      updateValidLastSync(nowIso);
+      updateValidLastSync(SYNC_CACHE[CURRENT_COLLAB.id].timestamp);
       renderDays();
+    } else if (data.success) {
+      // eCollab répond sans aucune journée : l'idContrat interrogé ne correspond
+      // plus à un contrat actif sur ce mois. On recharge la liste d'équipe pour
+      // récupérer l'identifiant du nouveau contrat, puis on réessaie.
+      showLoading('Mise à jour de la liste de l\'équipe...');
+      await healMissingCollabs(CURRENT_MOIS, CURRENT_ANNEE);
+      var repris = SYNC_CACHE[CURRENT_COLLAB.id];
+      if (repris && repris.mois === CURRENT_MOIS && repris.annee === CURRENT_ANNEE &&
+          repris.days && Object.keys(repris.days).length > 0) {
+        MONTH_DATA = repris.days;
+        if (repris.nomSalarie) document.getElementById('validCollabName').textContent = repris.nomSalarie;
+        updateValidLastSync(repris.timestamp);
+        renderDays();
+      } else {
+        MONTH_DATA = {};
+        document.getElementById('daysList').innerHTML =
+          '<div class="collab-empty">Aucune donnee pour ce mois.<br>' +
+          'Le contrat de ce collaborateur a peut-etre change dans eCollab.</div>';
+      }
     } else {
       document.getElementById('daysList').innerHTML =
         '<div class="collab-empty">Erreur : ' + escHtml(data.error || 'Inconnu') + '</div>';
     }
   } catch(e) {
+    setSyncStatus(CURRENT_COLLAB.id, 'error', CURRENT_MOIS, CURRENT_ANNEE, 'Connexion au serveur impossible');
+    saveSyncStatus();
     document.getElementById('daysList').innerHTML =
       '<div class="collab-empty">Erreur de connexion au serveur.</div>';
   }
@@ -2240,6 +2565,7 @@ function showValidateResult(type, msg) {
 function init() {
   loadCfg();
   loadSyncCache();
+  loadSyncStatus();
 
   // Pre-fill login fields (only override HTML defaults if CFG has a value)
   if (CFG.email)    document.getElementById('loginEmail').value = CFG.email;
