@@ -1027,6 +1027,9 @@ body.pc-full-active { max-width: 100% !important; }
     <button class="tf-round" onclick="openSettings()" title="Parametres">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
+    <button class="tf-round" onclick="doLogout()" title="Deconnexion">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+    </button>
   </div>
   <div class="tf-status"><span id="teamFullSyncStatus"></span> <span id="teamFullGlobalStatus"></span></div>
   <div id="teamColumns" onscroll="updateTeamFade()"></div>
@@ -1200,6 +1203,7 @@ function clearCfg() {
     localStorage.removeItem('vm_server');
     localStorage.removeItem('vm_collabs');
     localStorage.removeItem('vm_collabs_ts');
+    localStorage.removeItem('vm_sync_cache');
     localStorage.removeItem('vm_sync_status');
   } catch(e) {}
 }
@@ -1336,9 +1340,19 @@ function doLogout() {
   COLLABS = [];
   CURRENT_COLLAB = null;
   MONTH_DATA = {};
+  // Une synchro peut etre en cours (la vue equipe en lance une a l'ouverture) :
+  // les appels restants s'arretent d'eux-memes via isLoggedIn().
+  SYNC_CACHE = {};
+  SYNC_STATUS = {};
+  hideLoading();
   document.getElementById('loginEmail').value = '';
   document.getElementById('loginPassword').value = '';
   showScreen('login');
+}
+
+// Une session est ouverte tant que les identifiants sont en memoire.
+function isLoggedIn() {
+  return !!(CFG.email && CFG.server);
 }
 
 // ─── LISTE D'ÉQUIPE : RECHARGEMENT ──────────────────────────────────────────
@@ -1408,6 +1422,7 @@ function reconcileCollabs(oldList, newList) {
 
 // Recharge la liste depuis eCollab. Renvoie true si la composition a change.
 function refreshCollabsList() {
+  if (!isLoggedIn()) return Promise.resolve(false);
   if (_listRefreshPromise) return _listRefreshPromise;
   _listRefreshAt = Date.now();
   var p = (async function() {
@@ -1861,6 +1876,7 @@ async function validateAllTeam() {
 }
 
 async function syncTeamFull() {
+  if (!isLoggedIn()) return;
   var visible = visibleCollabsList();
   var bar = document.getElementById('teamFullSyncStatus');
   var syncBtn = document.getElementById('tfSyncBtn');
@@ -1876,11 +1892,12 @@ async function syncTeamFull() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: CFG.email, password: CFG.password, url: CFG.url, salarieId: c.id, mois: CURRENT_MOIS, annee: CURRENT_ANNEE })
     }).then(function(r){ return r.json(); }).then(function(data){
-      applySyncResult(c, CURRENT_MOIS, CURRENT_ANNEE, data);
+      if (isLoggedIn()) applySyncResult(c, CURRENT_MOIS, CURRENT_ANNEE, data);
     }).catch(function(){
-      setSyncStatus(c.id, 'error', CURRENT_MOIS, CURRENT_ANNEE, 'Connexion au serveur impossible');
+      if (isLoggedIn()) setSyncStatus(c.id, 'error', CURRENT_MOIS, CURRENT_ANNEE, 'Connexion au serveur impossible');
     }).then(function(){ done++; if (bar) bar.textContent = 'Synchronisation ' + done + '/' + total; });
   }));
+  if (!isLoggedIn()) { if (syncBtn) syncBtn.classList.remove('syncing'); if (bar) bar.textContent = ''; return; }
   persistSyncState();
   renderTeamColumns();
 
@@ -1948,6 +1965,7 @@ function persistSyncState() {
 }
 
 async function syncOneCollab(c, mois, annee) {
+  if (!isLoggedIn()) return false;   // deconnexion pendant la synchro
   try {
     var resp = await fetch(CFG.server + '/fetch-mois-direct', {
       method: 'POST',
@@ -2033,11 +2051,12 @@ async function syncAllCollabs() {
   } catch(e) { console.error('ensure-session error', e); }
 
   // Etape 2 : Synchronisation de chaque collaborateur (API directe, rapide)
-  for (var v = 0; v < visibles.length; v++) {
+  for (var v = 0; v < visibles.length && isLoggedIn(); v++) {
     showLoading('Synchronisation ' + (v + 1) + '/' + total + ' — ' + formatCollabName(visibles[v]));
     await syncOneCollab(visibles[v], mois, annee);
     renderCollabs();
   }
+  if (!isLoggedIn()) { if (btn) btn.classList.remove('syncing'); return; }
   persistSyncState();
 
   // Etape 3 : si un collaborateur n'a rien renvoyé, recharger la liste d'équipe
