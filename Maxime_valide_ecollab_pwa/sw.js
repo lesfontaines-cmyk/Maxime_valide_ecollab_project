@@ -5,8 +5,10 @@
 // Ce seul changement declenche le cycle complet de mise a jour.
 // =============================================
 
-var APP_VERSION = '1.4.25';
+var APP_VERSION = '1.4.26';
 var CACHE_NAME  = 'validation-cm-v' + APP_VERSION;
+// Delai au-dela duquel une navigation n'attend plus le reseau (reseau lent).
+var NAV_TIMEOUT_MS = 2500;
 
 var PRECACHE_FILES = [
   './index.html',
@@ -19,10 +21,18 @@ var PRECACHE_FILES = [
 
 // ----- INSTALL -----
 // Pre-cache les fichiers essentiels, puis activation immediate (skipWaiting).
+// `cache: 'reload'` contourne le cache HTTP du navigateur : sans lui, une
+// version perimee d'index.html peut etre pre-cachee telle quelle, et l'app
+// continue d'afficher l'ancienne page alors que le SW annonce la nouvelle
+// version. Un fichier manquant ne fait pas echouer toute l'installation.
 self.addEventListener('install', function(event) {
   event.waitUntil(
     caches.open(CACHE_NAME).then(function(cache) {
-      return cache.addAll(PRECACHE_FILES);
+      return Promise.all(PRECACHE_FILES.map(function(url) {
+        return fetch(url, { cache: 'reload' }).then(function(resp) {
+          if (resp && resp.status === 200) return cache.put(url, resp);
+        }).catch(function() {});
+      }));
     })
   );
   self.skipWaiting();
@@ -51,24 +61,31 @@ self.addEventListener('fetch', function(event) {
   // Ignorer les requetes non-GET
   if (request.method !== 'GET') return;
 
-  // Navigations HTML → stale-while-revalidate
+  // Navigations HTML → reseau d'abord, cache en secours.
+  // En "stale-while-revalidate", chaque deploiement s'affichait avec un
+  // chargement de retard : l'app montrait l'ancienne page et ne recuperait la
+  // nouvelle qu'au lancement suivant. On privilegie donc le reseau, sans
+  // l'attendre indefiniment : passe NAV_TIMEOUT_MS (reseau lent) ou en cas
+  // d'echec (hors ligne), on sert la page en cache.
   if (request.mode === 'navigate') {
     event.respondWith(
       caches.open(CACHE_NAME).then(function(cache) {
+        var network = fetch(request).then(function(networkResponse) {
+          if (networkResponse && networkResponse.status === 200) {
+            cache.put(request, networkResponse.clone());
+          }
+          return networkResponse;
+        });
         return cache.match(request).then(function(cachedResponse) {
-          // Toujours fetch en arriere-plan pour mettre a jour le cache
-          var fetchPromise = fetch(request).then(function(networkResponse) {
-            if (networkResponse && networkResponse.status === 200) {
-              cache.put(request, networkResponse.clone());
-            }
-            return networkResponse;
-          }).catch(function() {
-            return null;
-          });
-
-          // Retourne le cache immediatement si disponible,
-          // sinon attend le reseau
-          return cachedResponse || fetchPromise;
+          if (!cachedResponse) {
+            return network.catch(function() { return caches.match('./index.html'); });
+          }
+          return Promise.race([
+            network.catch(function() { return cachedResponse; }),
+            new Promise(function(resolve) {
+              setTimeout(function() { resolve(cachedResponse); }, NAV_TIMEOUT_MS);
+            })
+          ]);
         });
       })
     );
